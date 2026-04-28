@@ -1,0 +1,185 @@
+/* ============================================
+   СТИЛИ ДЛЯ АВТОРИЗАЦИИ
+   ============================================ */
+
+.auth-container {
+    max-width: 480px;
+    margin: 20px auto;
+    padding: 40px;
+    background: white;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+}
+
+.register-container {
+    max-width: 550px;
+}
+
+.auth-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.auth-header h2 {
+    margin-bottom: 10px;
+}
+
+.auth-header p {
+    color: var(--gray);
+    margin: 0;
+}
+
+.auth-footer {
+    text-align: center;
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border-color);
+}
+
+.auth-footer p {
+    margin: 0;
+}
+
+.auth-links {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 16px;
+    font-size: 14px;
+}
+
+/* ========== СООБЩЕНИЕ О ЗАПИСИ ========== */
+.booking-message {
+    background: var(--gradient-primary);
+    color: white;
+    padding: 20px;
+    border-radius: var(--radius-lg);
+    margin-bottom: 24px;
+}
+
+.booking-message h5 {
+    color: white;
+    margin-bottom: 8px;
+    font-size: 18px;
+}
+
+.booking-message p {
+    margin: 0;
+    opacity: 0.9;
+}
+
+/* ========== ВЫБОР РОЛИ ========== */
+.role-selector {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 10px;
+}
+
+.role-card {
+    flex: 1;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 20px 15px;
+    text-align: center;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.role-card:hover {
+    border-color: var(--primary-light);
+}
+
+.role-card.selected {
+    border-color: var(--primary);
+    background: rgba(102, 126, 234, 0.05);
+}
+
+.role-card i {
+    font-size: 36px;
+    color: var(--primary);
+    margin-bottom: 10px;
+}
+
+.role-card h5 {
+    margin-bottom: 5px;
+}
+
+.role-card small {
+    color: var(--gray);
+    font-size: 12px;
+}
+
+.role-card input {
+    display: none;
+}
+
+/* ========== ЯНДЕКС КНОПКА ========== */
+.yandex-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    width: 100%;
+    padding: 14px;
+    background: #fc3f1d;
+    color: white;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.yandex-btn:hover {
+    background: #e63615;
+}
+
+/* ========== РАЗДЕЛИТЕЛЬ ========== */
+.divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    margin: 28px 0;
+    color: var(--gray);
+}
+
+.divider::before,
+.divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.divider span {
+    padding: 0 15px;
+    font-size: 14px;
+    text-transform: uppercase;
+}
+
+/* ========== ВЕРИФИКАЦИЯ EMAIL ========== */
+.verify-container {
+    max-width: 500px;
+    margin: 60px auto;
+    text-align: center;
+    padding: 40px;
+    background: white;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+}
+
+.verify-icon {
+    font-size: 72px;
+    margin-bottom: 24px;
+}
+
+.verify-title {
+    font-size: 24px;
+    margin-bottom: 16px;
+}
+
+.verify-message {
+    color: var(--gray);
+    margin-bottom: 32px;
+    line-height: 1.6;
+}

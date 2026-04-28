@@ -1,0 +1,7 @@
+.osp/
+frontend_html/
+frontend1/
+.env.example/
+backend/logs/
+backend/.env
+backend/vendor/

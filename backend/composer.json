@@ -1,0 +1,22 @@
+ 
+{
+    "name": "cosmetic/backend",
+    "description": "Cosmetic Platform REST API",
+    "type": "project",
+    "require": {
+        "php": ">=7.4",
+        "ext-mysqli": "*",
+        "firebase/php-jwt": "^6.0",
+        "phpmailer/phpmailer": "^6.5",
+        "vlucas/phpdotenv": "^5.5",
+        "guzzlehttp/guzzle": "^7.0",
+        "monolog/monolog": "^2.0"
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    }
+}

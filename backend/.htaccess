@@ -1,0 +1,10 @@
+# Запрет доступа к скрытым файлам
+<FilesMatch "^\.">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Запрет доступа к служебным папкам
+RedirectMatch 403 ^/backend/(src|vendor|logs|config)/.*$
+
+# ВСЕ ОСТАЛЬНОЕ УБИРАЕМ - не нужно перенаправлять здесь!

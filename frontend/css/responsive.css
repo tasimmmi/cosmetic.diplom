@@ -1,0 +1,133 @@
+/* ============================================
+   АДАПТИВНОСТЬ
+   ============================================ */
+
+@media (max-width: 1200px) {
+    .container {
+        padding: 0 16px;
+    }
+    
+    .cosmetologists-grid {
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    }
+}
+
+@media (max-width: 992px) {
+    .hero .container {
+        grid-template-columns: 1fr;
+        text-align: center;
+    }
+    
+    .hero-search {
+        max-width: 500px;
+        margin: 0 auto;
+    }
+    
+    .hero-image {
+        display: none;
+    }
+    
+    .steps-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .dashboard-container {
+        flex-direction: column;
+    }
+    
+    .dashboard-sidebar {
+        width: 100%;
+    }
+    
+    .sidebar-menu {
+        display: flex;
+        flex-wrap: wrap;
+    }
+    
+    .sidebar-item {
+        flex: 1;
+        min-width: 120px;
+        justify-content: center;
+    }
+    
+    .sidebar-item span {
+        display: none;
+    }
+}
+
+@media (max-width: 768px) {
+    h1 { font-size: 2rem; }
+    h2 { font-size: 1.75rem; }
+    
+    .header-main .container {
+        flex-wrap: wrap;
+    }
+    
+    .nav-menu {
+        order: 3;
+        width: 100%;
+        justify-content: center;
+        margin-top: 15px;
+        gap: 20px;
+    }
+    
+    .steps-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .filters-bar {
+        flex-direction: column;
+    }
+    
+    .filter-group {
+        width: 100%;
+    }
+    
+    .filter-group .form-control {
+        flex: 1;
+    }
+    
+    .auth-container {
+        margin: 10px;
+        padding: 30px 20px;
+    }
+}
+
+@media (max-width: 576px) {
+    .header-top .container {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .nav-menu {
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+    
+    .hero-title {
+        font-size: 1.75rem;
+    }
+    
+    .hero-subtitle {
+        font-size: 1rem;
+    }
+    
+    .hero-search {
+        flex-direction: column;
+    }
+    
+    .btn-lg {
+        padding: 12px 20px;
+        font-size: 16px;
+    }
+    
+    .role-selector {
+        flex-direction: column;
+    }
+    
+    .auth-links {
+        flex-direction: column;
+        gap: 10px;
+        align-items: flex-start;
+    }
+}
