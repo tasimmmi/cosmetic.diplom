@@ -1,3 +1,5 @@
+
+Options -MultiViews
 # Запрет доступа к скрытым файлам
 <FilesMatch "^\.">
     Order allow,deny

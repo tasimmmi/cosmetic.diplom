@@ -87,79 +87,81 @@ class Client
     }
 
     /**
-     * Получить клиентов косметолога
+     * 🔥 Получить клиентов косметолога из представления
      */
-    public static function getByCosmetologist(int $cosmetologistId, string $search = '', string $sort = 'recent'): array
+    public static function getByCosmetologistId(int $cosmetologistId, string $search = '', string $sort = 'recent'): array
     {
-        $sql = "SELECT 
-                    c.id as client_id,
-                    c.fullname,
-                    c.phone,
-                    c.communication,
-                    c.creator_id,
-                    u.email,
-                    COUNT(CASE WHEN b.status = 'completed' THEN 1 END) as visit_count,
-                    COALESCE(SUM(CASE WHEN b.status = 'completed' THEN s.price ELSE 0 END), 0) as total_spent,
-                    MAX(b.schedule) as last_visit,
-                    CASE 
-                        WHEN MAX(b.schedule) >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN 1
-                        ELSE 0
-                    END as is_active
-                FROM Clients c
-                LEFT JOIN Users u ON c.user_id = u.id
-                LEFT JOIN Books b ON c.id = b.client_id AND b.cosmetologist_id = ?
-                LEFT JOIN Services s ON b.service_id = s.id
-                WHERE c.creator_id = ? OR EXISTS (
-                    SELECT 1 FROM Books b2 
-                    WHERE b2.client_id = c.id 
-                    AND b2.cosmetologist_id = ?
-                )";
+        $viewName = 'v_clients_cosmetologist_' . $cosmetologistId;
         
-        $params = [$cosmetologistId, $cosmetologistId, $cosmetologistId];
-        $types = 'iii';
+        // Безопасность: разрешены только существующие представления
+        $allowedViews = ['v_clients_cosmetologist_1', 'v_clients_cosmetologist_2'];
+        if (!in_array($viewName, $allowedViews)) {
+            return [];
+        }
         
+        $sql = "SELECT * FROM {$viewName}";
+        $params = [];
+        $types = '';
+        
+        // Поиск
         if (!empty($search)) {
-            $sql .= " AND (c.fullname LIKE ? OR c.phone LIKE ?)";
-            $searchTerm = "%{$search}%";
-            $params[] = $searchTerm;
-            $params[] = $searchTerm;
+            $sql .= " WHERE (fullname LIKE ? OR phone LIKE ?)";
+            $searchParam = "%{$search}%";
+            $params[] = $searchParam;
+            $params[] = $searchParam;
             $types .= 'ss';
         }
         
-        $sql .= " GROUP BY c.id, c.fullname, c.phone, c.communication, c.creator_id, u.email";
-        
+        // Сортировка
         $sortOptions = [
             'frequent' => 'visit_count DESC',
-            'name' => 'c.fullname ASC',
+            'name' => 'fullname ASC',
             'revenue' => 'total_spent DESC',
-            'recent' => 'last_visit DESC'
+            'recent' => 'last_visit DESC, fullname ASC'
         ];
         
         $sql .= " ORDER BY " . ($sortOptions[$sort] ?? $sortOptions['recent']);
         
-        return Database::fetchAll($sql, $params, $types);
+        return Database::fetchAll($sql, $params, $types) ?: [];
     }
 
     /**
-     * Получить историю записей клиента у косметолога
+     * 🔥 Получить клиента из представления (с проверкой доступа)
      */
-    public static function getHistory(int $clientId, int $cosmetologistId): array
+    public static function findInView(int $clientId, int $cosmetologistId): ?array
+    {
+        $viewName = 'v_clients_cosmetologist_' . $cosmetologistId;
+        
+        $allowedViews = ['v_clients_cosmetologist_1', 'v_clients_cosmetologist_2'];
+        if (!in_array($viewName, $allowedViews)) {
+            return null;
+        }
+        
+        return Database::fetch(
+            "SELECT * FROM {$viewName} WHERE id = ?",
+            [$clientId],
+            'i'
+        );
+    }
+
+    /**
+     * 🔥 Получить историю записей клиента у косметолога
+     */
+    public static function getHistoryWithCosmetologist(int $clientId, int $cosmetologistId): array
     {
         $sql = "SELECT 
-                    b.id as booking_id,
+                    b.id,
                     b.schedule,
-                    s.service,
-                    s.price,
                     b.status,
                     b.description,
-                    DATE(b.schedule) as visit_date,
-                    TIME(b.schedule) as visit_time
+                    s.service,
+                    s.price
                 FROM Books b
-                INNER JOIN Services s ON b.service_id = s.id
+                JOIN Services s ON b.service_id = s.id
                 WHERE b.client_id = ? AND b.cosmetologist_id = ?
                 ORDER BY b.schedule DESC";
         
-        return Database::fetchAll($sql, [$clientId, $cosmetologistId], 'ii');
+        return Database::fetchAll($sql, [$clientId, $cosmetologistId], 'ii') ?: [];
     }
 
     /**
@@ -167,27 +169,20 @@ class Client
      */
     public static function getStatistics(int $cosmetologistId): array
     {
-        $sql = "SELECT 
-                    COUNT(DISTINCT c.id) as total_clients,
-                    COALESCE(AVG(stats.visit_count), 0) as avg_visits,
-                    COALESCE(AVG(stats.total_spent), 0) as avg_revenue
-                FROM Clients c
-                LEFT JOIN (
-                    SELECT 
-                        client_id,
-                        COUNT(*) as visit_count,
-                        SUM(s.price) as total_spent
-                    FROM Books b
-                    JOIN Services s ON b.service_id = s.id
-                    WHERE b.cosmetologist_id = ? AND b.status = 'completed'
-                    GROUP BY client_id
-                ) stats ON c.id = stats.client_id
-                WHERE c.creator_id = ? OR EXISTS (
-                    SELECT 1 FROM Books b2 
-                    WHERE b2.client_id = c.id AND b2.cosmetologist_id = ?
-                )";
+        $viewName = 'v_clients_cosmetologist_' . $cosmetologistId;
         
-        return Database::fetch($sql, [$cosmetologistId, $cosmetologistId, $cosmetologistId], 'iii') ?? [];
+        $allowedViews = ['v_clients_cosmetologist_1', 'v_clients_cosmetologist_2'];
+        if (!in_array($viewName, $allowedViews)) {
+            return [];
+        }
+        
+        $sql = "SELECT 
+                    COUNT(*) as total_clients,
+                    COALESCE(AVG(visit_count), 0) as avg_visits,
+                    COALESCE(AVG(total_spent), 0) as avg_revenue
+                FROM {$viewName}";
+        
+        return Database::fetch($sql) ?? [];
     }
 
     /**

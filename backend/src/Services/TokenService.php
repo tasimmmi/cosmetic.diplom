@@ -5,6 +5,8 @@ use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use App\Models\RefreshToken;
 use App\Models\User;
+use App\Models\Cosmetologist;
+use App\Models\Client;
 
 class TokenService
 {
@@ -19,16 +21,25 @@ class TokenService
         $this->refreshExpires = $this->parseExpiration($_ENV['JWT_REFRESH_EXPIRES'] ?? '30d');
     }
 
+    /**
+     * Сгенерировать access токен с role_id
+     */
     public function generateAccessToken($user)
     {
         $payload = [
-            'user_id' => $user['id'],
+            'user_id' => (int)$user['id'],
             'email' => $user['email'],
             'role' => $user['role'] ?? 'client',
             'type' => 'access',
             'iat' => time(),
             'exp' => time() + $this->accessExpires
         ];
+
+        if (($user['role'] ?? '') === 'cosmetologist') {
+            $payload['cosmetologist_id'] = $user['cosmetologist_id'] ?? $this->getCosmetologistId($user['id']);
+        } elseif (($user['role'] ?? '') === 'client') {
+            $payload['client_id'] = $user['client_id'] ?? $this->getClientId($user['id']);
+        }
 
         return JWT::encode($payload, $this->secretKey, 'HS256');
     }
@@ -49,6 +60,9 @@ class TokenService
         return $token;
     }
 
+    /**
+     *  Сгенерировать пару токенов
+     */
     public function generateTokenPair($user, $metadata = [])
     {
         return [
@@ -74,6 +88,9 @@ class TokenService
         }
     }
 
+    /**
+     *  Обновить access токен с сохранением role_id
+     */
     public function refreshAccessToken($refreshToken)
     {
         $tokenRecord = RefreshToken::findByToken($refreshToken);
@@ -95,10 +112,17 @@ class TokenService
         if (!$user) {
             throw new \Exception('User not found');
         }
+        if ($user['role'] === 'cosmetologist') {
+            $cosm = Cosmetologist::findByUserId($user['id']);
+            $user['cosmetologist_id'] = $cosm['id'] ?? null;
+        } elseif ($user['role'] === 'client') {
+            $client = Client::findByUserId($user['id']);
+            $user['client_id'] = $client['id'] ?? null;
+        }
         
         $accessToken = $this->generateAccessToken($user);
         
-        // Ротация refresh token (опционально)
+        // Ротация refresh token
         if (($_ENV['ROTATE_REFRESH_TOKENS'] ?? 'false') === 'true') {
             RefreshToken::revoke($refreshToken);
             $newRefreshToken = $this->generateRefreshToken($user, [
@@ -134,6 +158,24 @@ class TokenService
         return bin2hex(random_bytes(32));
     }
 
+    /**
+     *  Получить cosmetologist_id по user_id
+     */
+    private function getCosmetologistId($userId): ?int
+    {
+        $cosm = Cosmetologist::findByUserId((int)$userId);
+        return $cosm ? (int)$cosm['id'] : null;
+    }
+
+    /**
+     *  Получить client_id по user_id
+     */
+    private function getClientId($userId): ?int
+    {
+        $client = Client::findByUserId((int)$userId);
+        return $client ? (int)$client['id'] : null;
+    }
+
     private function parseExpiration($expiresIn)
     {
         $units = [
@@ -147,6 +189,6 @@ class TokenService
             return (int) $matches[1] * $units[$matches[2]];
         }
         
-        return 900; // 15 минут по умолчанию
+        return 900;
     }
 }

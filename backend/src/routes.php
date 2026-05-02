@@ -7,10 +7,12 @@ use App\Controllers\AuthController;
 use App\Controllers\UserController;
 use App\Controllers\BookingController;
 use App\Controllers\CosmetologistController;
+use App\Controllers\ScheduleController;
 use App\Controllers\ClientController;
 use App\Controllers\AliceController;
 use App\Controllers\LogController;
 use App\Middleware\AuthMiddleware;
+use App\Middleware\AliceAuthMiddleware;
 
 /** @var \App\Core\App $app */
 
@@ -36,15 +38,16 @@ $app->get('/api/auth/yandex/callback', [AuthController::class, 'yandexCallback']
 $app->get('/api/cosmetologists', [CosmetologistController::class, 'list']);
 $app->get('/api/cosmetologists/{id}', [CosmetologistController::class, 'show']);
 $app->get('/api/cosmetologists/{id}/services', [CosmetologistController::class, 'services']);
-$app->get('/api/cosmetologists/{id}/slots', [CosmetologistController::class, 'availableSlots']);
+$app->get('/api/cosmetologists/{id}/slots', [ScheduleController::class, 'availableSlots']);
 
 // Алиса
 $app->post('/api/alice/webhook', [AliceController::class, 'webhook']);
+    //->middleware(new AliceAuthMiddleware());
 
 // Логи с фронтенда
 $app->post('/api/logs/frontend', [LogController::class, 'frontendLogs']);
 
-// ==================== ЗАЩИЩЕННЫЕ МАРШРУТЫ (ТРЕБУЕТСЯ АВТОРИЗАЦИЯ) ====================
+// ==================== ЗАЩИЩЕННЫЕ МАРШРУТЫ ====================
 
 // Аутентификация
 $app->post('/api/auth/logout-all', [AuthController::class, 'logoutAll'])
@@ -56,7 +59,7 @@ $app->post('/api/auth/yandex/link', [AuthController::class, 'linkYandex'])
 $app->delete('/api/auth/yandex/unlink', [AuthController::class, 'unlinkYandex'])
     ->middleware(new AuthMiddleware());
 
-// Профиль (доступен всем авторизованным)
+// Профиль
 $app->get('/api/users/me', [UserController::class, 'me'])
     ->middleware(new AuthMiddleware());
 $app->put('/api/users/profile', [UserController::class, 'updateProfile'])
@@ -66,7 +69,7 @@ $app->get('/api/users/bookings', [UserController::class, 'getBookings'])
 $app->post('/api/users/change-password', [UserController::class, 'changePassword'])
     ->middleware(new AuthMiddleware());
 
-// Бронирования (для клиентов)
+// Бронирования
 $app->get('/api/bookings', [BookingController::class, 'index'])
     ->middleware(new AuthMiddleware());
 $app->post('/api/bookings', [BookingController::class, 'create'])
@@ -115,24 +118,57 @@ $app->post('/api/cosmetologist/procurements', [CosmetologistController::class, '
     ->middleware(new AuthMiddleware(['cosmetologist']));
 
 // Клиенты
-
 $app->get('/api/cosmetologist/clients/{id}', [CosmetologistController::class, 'clientDetails'])
-    ->middleware(new AuthMiddleware(['cosmetologist']));
-$app->get('/api/cosmetologist/clients', [CosmetologistController::class, 'clients'])
     ->middleware(new AuthMiddleware(['cosmetologist']));
 $app->put('/api/cosmetologist/clients/{id}', [CosmetologistController::class, 'updateClient'])
     ->middleware(new AuthMiddleware(['cosmetologist']));
-$app->post('/api/cosmetologist/clients', [CosmetologistController::class, 'addClient'])  // ← ДОБАВИТЬ ЭТО
+$app->post('/api/cosmetologist/clients', [CosmetologistController::class, 'addClient'])
     ->middleware(new AuthMiddleware(['cosmetologist']));
-
-// Расписание
-$app->get('/api/cosmetologist/schedule', [CosmetologistController::class, 'schedule'])
-    ->middleware(new AuthMiddleware(['cosmetologist']));
-$app->post('/api/cosmetologist/schedule', [CosmetologistController::class, 'addScheduleSlot'])
+$app->get('/api/cosmetologist/clients', [CosmetologistController::class, 'clients'])
     ->middleware(new AuthMiddleware(['cosmetologist']));
 
 // Отчеты
 $app->get('/api/cosmetologist/reports', [CosmetologistController::class, 'reports'])
+    ->middleware(new AuthMiddleware(['cosmetologist']));
+
+// ==================== РАСПИСАНИЕ (ScheduleController) ====================
+
+// Просмотр
+$app->get('/api/cosmetologist/schedule', [ScheduleController::class, 'index'])
+    ->middleware(new AuthMiddleware(['cosmetologist']));
+$app->get('/api/cosmetologist/schedule/all', [ScheduleController::class, 'allByDate'])
+    ->middleware(new AuthMiddleware(['cosmetologist']));
+$app->get('/api/cosmetologist/schedule/calendar-data', [ScheduleController::class, 'getCalendarData'])
+    ->middleware(new AuthMiddleware(['cosmetologist']));
+
+// Генерация
+$app->post('/api/cosmetologist/schedule/generate', [ScheduleController::class, 'generate'])
+    ->middleware(new AuthMiddleware(['cosmetologist']));
+
+// Управление слотами
+$app->delete('/api/cosmetologist/schedule/slot/{id}', [ScheduleController::class, 'deleteSlot'])
+    ->middleware(new AuthMiddleware(['cosmetologist']));
+$app->put('/api/cosmetologist/schedule/slot/{id}/deactivate', [ScheduleController::class, 'deactivateSlot'])
+    ->middleware(new AuthMiddleware(['cosmetologist']));
+$app->put('/api/cosmetologist/schedule/slot/{id}/activate', [ScheduleController::class, 'activateSlot'])
+    ->middleware(new AuthMiddleware(['cosmetologist']));
+
+// Управление днями
+$app->delete('/api/cosmetologist/schedule/day', [ScheduleController::class, 'clearDay'])
+    ->middleware(new AuthMiddleware(['cosmetologist']));
+$app->put('/api/cosmetologist/schedule/day/deactivate', [ScheduleController::class, 'deactivateDay'])
+    ->middleware(new AuthMiddleware(['cosmetologist']));
+$app->put('/api/cosmetologist/schedule/day/activate', [ScheduleController::class, 'activateDay'])
+    ->middleware(new AuthMiddleware(['cosmetologist']));
+
+// Занятые слоты
+$app->get('/api/cosmetologist/schedule/booked', [ScheduleController::class, 'getBookedSlots'])
+    ->middleware(new AuthMiddleware(['cosmetologist']));
+$app->get('/api/cosmetologist/schedule/calendar', [ScheduleController::class, 'getCalendarBooked'])
+    ->middleware(new AuthMiddleware(['cosmetologist']));
+
+// Статистика
+$app->get('/api/cosmetologist/schedule/stats', [ScheduleController::class, 'dayStats'])
     ->middleware(new AuthMiddleware(['cosmetologist']));
 
 // ==================== МАРШРУТЫ КЛИЕНТА ====================

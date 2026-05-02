@@ -21,16 +21,11 @@ class BookingController
         $this->emailService = new EmailService();
     }
 
-    /**
-     * Получить ID пользователя из токена
-     */
     private function getUserId($request)
     {
-        // Пробуем получить из middleware
         $userId = (int)$request->getParam('user_id');
         if ($userId > 0) return $userId;
         
-        // Если нет - читаем токен напрямую
         $headers = getallheaders();
         $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
         
@@ -54,7 +49,6 @@ class BookingController
     {
         $userId = $this->getUserId($request);
         $status = $request->getQueryParam('status');
-        
         $user = User::findById($userId);
         
         if (!$user) {
@@ -91,15 +85,8 @@ class BookingController
             return $response->error('Бронирование не найдено', 404);
         }
         
-        $hasAccess = false;
-        
-        if ($user['role'] === 'client' && !empty($user['client_id']) && 
-            (int)$booking['client_id'] === (int)$user['client_id']) {
-            $hasAccess = true;
-        } elseif ($user['role'] === 'cosmetologist' && !empty($user['cosmetologist_id']) && 
-                  (int)$booking['cosmetologist_id'] === (int)$user['cosmetologist_id']) {
-            $hasAccess = true;
-        }
+        $hasAccess = ($user['role'] === 'client' && !empty($user['client_id']) && (int)$booking['client_id'] === (int)$user['client_id'])
+                  || ($user['role'] === 'cosmetologist' && !empty($user['cosmetologist_id']) && (int)$booking['cosmetologist_id'] === (int)$user['cosmetologist_id']);
         
         if (!$hasAccess) {
             return $response->error('Доступ запрещен', 403);
@@ -109,32 +96,43 @@ class BookingController
     }
 
     /**
-     * Создать новое бронирование
+     * Создать бронирование (клиент или косметолог)
      */
     public function create($request, $response)
     {
-        $data = $request->getBody();
+        $userId = $this->getUserId($request);
+        $user = User::findById($userId);
         
-        LoggerService::info('Creating booking', ['data' => $data]);
-        
-        $validator = new Validator($data);
-        $validator->required(['cosmetologist_id', 'service_id', 'schedule', 'client_id'])
-                  ->numeric('cosmetologist_id')
-                  ->numeric('service_id')
-                  ->numeric('client_id');
-        
-        if (!$validator->isValid()) {
-            $errors = $validator->getErrors();
-            $firstError = $validator->getFirstError();
-            if ($firstError === null) {
-                $firstError = 'Validation failed';
-            }
-            return $response->error($firstError, 400, $errors);
+        if (!$user) {
+            return $response->error('Пользователь не найден', 404);
         }
         
-        $schedule = $data['schedule'];
-        $timestamp = strtotime($schedule);
-        $scheduleFormatted = date('Y-m-d H:i:s', $timestamp);
+        $data = $request->getBody();
+        
+        $cosmetologistId = $user['role'] === 'cosmetologist' 
+            ? ($user['cosmetologist_id'] ?? null) 
+            : ($data['cosmetologist_id'] ?? null);
+        
+        $clientId = $user['role'] === 'client' 
+            ? ($user['client_id'] ?? null) 
+            : ($data['client_id'] ?? null);
+        
+        if (!$cosmetologistId) {
+            return $response->error('Не удалось определить косметолога', 400);
+        }
+        
+        if (!$clientId) {
+            return $response->error('Не удалось определить клиента', 400);
+        }
+        
+        $validator = new Validator($data);
+        $validator->required(['service_id', 'schedule'])->numeric('service_id');
+        
+        if (!$validator->isValid()) {
+            return $response->error($validator->getFirstError(), 400, $validator->getErrors());
+        }
+        
+        $scheduleFormatted = date('Y-m-d H:i:s', strtotime($data['schedule']));
         
         $service = Service::findById((int)$data['service_id']);
         
@@ -142,7 +140,7 @@ class BookingController
             return $response->error('Услуга не найдена', 404);
         }
         
-        if ((int)$service['cosmetologist_id'] !== (int)$data['cosmetologist_id']) {
+        if ((int)$service['cosmetologist_id'] !== (int)$cosmetologistId) {
             return $response->error('Услуга не принадлежит указанному косметологу', 400);
         }
         
@@ -150,12 +148,12 @@ class BookingController
             Database::beginTransaction();
             
             $bookingId = Booking::create([
-                'cosmetologist_id' => (int)$data['cosmetologist_id'],
+                'cosmetologist_id' => (int)$cosmetologistId,
                 'service_id' => (int)$data['service_id'],
                 'schedule' => $scheduleFormatted,
-                'client_id' => (int)$data['client_id'],
+                'client_id' => (int)$clientId,
                 'status' => 'pending',
-                'description' => isset($data['description']) ? $data['description'] : null
+                'description' => $data['description'] ?? null
             ]);
             
             Database::commit();
@@ -189,15 +187,8 @@ class BookingController
             return $response->error('Бронирование не найдено', 404);
         }
         
-        $canCancel = false;
-        
-        if ($user['role'] === 'client' && !empty($user['client_id']) && 
-            (int)$booking['client_id'] === (int)$user['client_id']) {
-            $canCancel = true;
-        } elseif ($user['role'] === 'cosmetologist' && !empty($user['cosmetologist_id']) && 
-                  (int)$booking['cosmetologist_id'] === (int)$user['cosmetologist_id']) {
-            $canCancel = true;
-        }
+        $canCancel = ($user['role'] === 'client' && !empty($user['client_id']) && (int)$booking['client_id'] === (int)$user['client_id'])
+                  || ($user['role'] === 'cosmetologist' && !empty($user['cosmetologist_id']) && (int)$booking['cosmetologist_id'] === (int)$user['cosmetologist_id']);
         
         if (!$canCancel) {
             return $response->error('Доступ запрещен', 403);
@@ -215,6 +206,20 @@ class BookingController
     }
 
     /**
+     * Обновить комментарий к бронированию
+     */
+    public function updateComment($request, $response, $id)
+    {
+        $data = $request->getBody();
+        
+        Booking::updateDescription((int)$id, $data['description'] ?? '');
+        
+        LoggerService::info('Booking comment updated', ['booking_id' => $id]);
+        
+        return $response->success(null, 'Комментарий обновлен');
+    }
+
+    /**
      * Получить услуги косметолога
      */
     public function services($request, $response, $id)
@@ -226,10 +231,7 @@ class BookingController
             return $response->error('Косметолог не найден', 404);
         }
         
-        return $response->success([
-            'cosmetologist' => $cosmetologist,
-            'services' => $services
-        ]);
+        return $response->success(['cosmetologist' => $cosmetologist, 'services' => $services]);
     }
 
     /**
@@ -246,15 +248,11 @@ class BookingController
         
         $slots = \App\Models\Cosmetologist::getAvailableSlots((int)$id, $date);
         
-        return $response->success([
-            'cosmetologist_id' => (int)$id,
-            'date' => $date,
-            'slots' => $slots
-        ]);
+        return $response->success(['cosmetologist_id' => (int)$id, 'date' => $date, 'slots' => $slots]);
     }
 
     /**
-     * Получить бронирования для косметолога
+     * Получить бронирования косметолога
      */
     public function cosmetologistBookings($request, $response)
     {
@@ -271,20 +269,5 @@ class BookingController
         $bookings = Booking::findByCosmetologist((int)$user['cosmetologist_id'], $date, $status);
         
         return $response->success(['bookings' => $bookings]);
-    }
-
-    /**
-     * Обновить комментарий к записи
-     */
-    public function updateComment($request, $response, $id)
-    {
-        $data = $request->getBody();
-        $description = isset($data['description']) ? $data['description'] : '';
-        
-        Booking::updateDescription((int)$id, $description);
-        
-        LoggerService::info('Booking comment updated', ['booking_id' => $id]);
-        
-        return $response->success(null, 'Комментарий обновлен');
     }
 }
