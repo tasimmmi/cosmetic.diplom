@@ -42,8 +42,19 @@ class App
         );
 
         if (!$route) {
-            $this->response->json(['error' => 'Route not found'], 404);
+            $this->response->json($this->response->error('Route not found', 404));
             return;
+        }
+
+        foreach ($route['middlewares'] as $mw) {
+            if (is_array($mw) && class_exists($mw[0])) {
+                $args = $mw[1] ?? '';
+                $args = is_array($args) ? $args : [$args];
+                $mw = new $mw[0](...$args);
+            }
+            if (method_exists($mw, 'handle')) {
+                if ($mw->handle($this->request, $this->response) === false) return;
+            }
         }
 
         $callback = $route['callback'];
@@ -53,14 +64,11 @@ class App
             $result = $callback($this->request, $this->response, ...array_values($params));
         } elseif (is_array($callback)) {
             $controller = new $callback[0]();
-            $method = $callback[1];
-            $result = $controller->$method($this->request, $this->response, ...array_values($params));
-        } else {
-            $result = null;
+            $result = $controller->{$callback[1]}($this->request, $this->response, ...array_values($params));
         }
 
-        if ($result !== null) {
-            $this->response->json($result);
+        if (isset($result) && is_array($result)) {
+            $this->response->json($result, $this->response->getStatusCode());
         }
     }
 }

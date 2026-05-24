@@ -3,7 +3,7 @@ namespace App\Core;
 
 class Router
 {
-    private array $routes = [];
+    public array $routes = [];
 
     public function addRoute($method, $path, $callback)
     {
@@ -14,31 +14,30 @@ class Router
             'middlewares' => []
         ];
         
-        return $this;
-    }
-
-    public function middleware($middleware)
-    {
-        $lastIndex = count($this->routes) - 1;
-        if ($lastIndex >= 0) {
-            $this->routes[$lastIndex]['middlewares'][] = $middleware;
-        }
-        return $this;
+        return new class($this, count($this->routes) - 1) {
+            private $router;
+            private $index;
+            
+            public function __construct($router, $index)
+            {
+                $this->router = $router;
+                $this->index = $index;
+            }
+            
+            public function middleware($m)
+            {
+                $this->router->routes[$this->index]['middlewares'][] = $m;
+            }
+        };
     }
 
     public function resolve($method, $path)
     {
-        // Убираем /backend/public из начала пути
         $path = str_replace('/backend/public', '', $path);
         $path = $this->normalizePath($path);
         $method = strtoupper($method);
 
-        error_log("Router resolving: $method $path");
-        error_log("Available routes: " . count($this->routes));
-
         foreach ($this->routes as $route) {
-            error_log("Checking route: " . $route['method'] . " " . $route['path']);
-            
             if ($route['method'] !== $method && $route['method'] !== 'ANY') {
                 continue;
             }
@@ -46,7 +45,6 @@ class Router
             $params = $this->matchPath($route['path'], $path);
             
             if ($params !== null) {
-                error_log("Route matched: " . $route['path']);
                 return [
                     'callback' => $route['callback'],
                     'middlewares' => $route['middlewares'],
@@ -55,7 +53,6 @@ class Router
             }
         }
 
-        error_log("No route found for: $method $path");
         return null;
     }
 
@@ -65,7 +62,6 @@ class Router
             return [];
         }
 
-        // Проверяем параметры вида {id}
         $routeParts = explode('/', trim($routePath, '/'));
         $requestParts = explode('/', trim($requestPath, '/'));
 
@@ -76,12 +72,9 @@ class Router
         $params = [];
         
         for ($i = 0; $i < count($routeParts); $i++) {
-            $routePart = $routeParts[$i];
-            $requestPart = $requestParts[$i];
-
-            if (preg_match('/^{([a-zA-Z_][a-zA-Z0-9_]*)}$/', $routePart, $matches)) {
-                $params[$matches[1]] = $requestPart;
-            } elseif ($routePart !== $requestPart) {
+            if (preg_match('/^{([a-zA-Z_][a-zA-Z0-9_]*)}$/', $routeParts[$i], $matches)) {
+                $params[$matches[1]] = $requestParts[$i];
+            } elseif ($routeParts[$i] !== $requestParts[$i]) {
                 return null;
             }
         }

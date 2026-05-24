@@ -30,34 +30,11 @@
     .steps-grid {
         grid-template-columns: repeat(2, 1fr);
     }
-    
-    .dashboard-container {
-        flex-direction: column;
-    }
-    
-    .dashboard-sidebar {
-        width: 100%;
-    }
-    
-    .sidebar-menu {
-        display: flex;
-        flex-wrap: wrap;
-    }
-    
-    .sidebar-item {
-        flex: 1;
-        min-width: 120px;
-        justify-content: center;
-    }
-    
-    .sidebar-item span {
-        display: none;
-    }
 }
 
 @media (max-width: 768px) {
-    h1 { font-size: 2rem; }
-    h2 { font-size: 1.75rem; }
+    h1 { font-size: 1.75rem; }
+    h2 { font-size: 1.5rem; }
     
     .header-main .container {
         flex-wrap: wrap;
@@ -68,7 +45,7 @@
         width: 100%;
         justify-content: center;
         margin-top: 15px;
-        gap: 20px;
+        gap: 15px;
     }
     
     .steps-grid {
@@ -89,7 +66,19 @@
     
     .auth-container {
         margin: 10px;
-        padding: 30px 20px;
+        padding: 25px 15px;
+    }
+    
+    .cosmetologists-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .hero {
+        padding: 30px 0;
+    }
+    
+    .hero-title {
+        font-size: 1.75rem;
     }
 }
 
@@ -101,15 +90,15 @@
     
     .nav-menu {
         flex-wrap: wrap;
-        gap: 15px;
+        gap: 10px;
     }
     
     .hero-title {
-        font-size: 1.75rem;
+        font-size: 1.5rem;
     }
     
     .hero-subtitle {
-        font-size: 1rem;
+        font-size: 0.9rem;
     }
     
     .hero-search {

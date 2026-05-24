@@ -28,8 +28,8 @@ include __DIR__ . '/../partials/header.php';
                     <div class="stat-label">Записей сегодня</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value" id="stat-pending">0</div>
-                    <div class="stat-label">Ожидают подтверждения</div>
+                    <div class="stat-value" id="stat-cancelled">0</div>
+                    <div class="stat-label">Отмененные</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value" id="stat-completed">0</div>
@@ -77,7 +77,7 @@ async function loadDashboard() {
             if (statsData.success && statsData.data) {
                 var stats = statsData.data;
                 document.getElementById('stat-today').textContent = stats.today_bookings || 0;
-                document.getElementById('stat-pending').textContent = stats.pending || 0;
+                document.getElementById('stat-cancelled').textContent = stats.cancelled || 0;
                 document.getElementById('stat-completed').textContent = stats.completed_today || 0;
                 document.getElementById('stat-revenue').textContent = (stats.today_revenue || 0) + ' BYN';
             }

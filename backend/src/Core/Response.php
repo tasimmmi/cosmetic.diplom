@@ -15,8 +15,12 @@ class Response
     public function setStatusCode($code)
     {
         $this->statusCode = $code;
-        http_response_code($code);
         return $this;
+    }
+
+        public function getStatusCode(): int
+    {
+        return $this->statusCode;
     }
 
     public function json($data, $statusCode = null)
@@ -25,38 +29,26 @@ class Response
             $this->setStatusCode($statusCode);
         }
         
+        http_response_code($this->statusCode);
         $this->setHeader('Content-Type', 'application/json; charset=utf-8');
         $this->sendHeaders();
         
         echo json_encode($data, JSON_UNESCAPED_UNICODE);
     }
 
-    public function success($data = null, $message = 'Success')
+    public function success($data = null, $message = 'Success'): array
     {
-        $response = [
-            'success' => true,
-            'message' => $message
-        ];
-        
-        if ($data !== null) {
-            $response['data'] = $data;
-        }
-        
-        $this->json($response, 200);
+        $response = ['success' => true, 'message' => $message];
+        if ($data !== null) $response['data'] = $data;
+        return $response;
     }
 
-    public function error($message, $code = 400, $details = null)
+    public function error($message, $code = 400, $details = null): array
     {
-        $response = [
-            'success' => false,
-            'error' => $message
-        ];
-        
-        if ($details !== null) {
-            $response['details'] = $details;
-        }
-        
-        $this->json($response, $code);
+        $this->setStatusCode($code);
+        $response = ['success' => false, 'error' => $message];
+        if ($details !== null) $response['details'] = $details;
+        return $response;
     }
 
     private function sendHeaders()
@@ -64,13 +56,5 @@ class Response
         foreach ($this->headers as $name => $value) {
             header("$name: $value");
         }
-    }
-
-    public function redirect($url, $statusCode = 302)
-    {
-        $this->setStatusCode($statusCode);
-        $this->setHeader('Location', $url);
-        $this->sendHeaders();
-        exit;
     }
 }

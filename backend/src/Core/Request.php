@@ -33,19 +33,15 @@ class Request
             $path = substr($path, 0, $position);
         }
         
-        $path = preg_replace('/^\/api/', '', $path);
-        
         return $path ?: '/';
     }
 
     private function parseHeaders()
     {
-        // Используем getallheaders() если доступна
         if (function_exists('getallheaders')) {
             $this->headers = getallheaders();
             LoggerService::info('Headers parsed via getallheaders', ['headers' => $this->headers]);
         } else {
-            // Fallback для серверов без getallheaders()
             foreach ($_SERVER as $name => $value) {
                 if (strpos($name, 'HTTP_') === 0) {
                     $headerName = str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))));
@@ -111,7 +107,6 @@ class Request
     public function getBearerToken()
     {
         $authHeader = $this->getHeader('Authorization');
-        
         LoggerService::info('Auth header: ' . ($authHeader ?? 'NOT SET'));
         
         if ($authHeader && preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {

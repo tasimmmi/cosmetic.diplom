@@ -169,4 +169,52 @@ class ScheduleController
         $date = $request->getQueryParam('date', date('Y-m-d'));
         return $response->success(['date' => $date, 'stats' => Schedule::getDayStats($cosmetologistId, $date)]);
     }
+
+    /**
+     * POST /api/cosmetologist/schedule/check-and-generate
+     * Проверить доступность и создать слоты (всё или ничего)
+     */
+    public function checkAndGenerate($request, $response)
+    {
+        $cosmetologistId = $this->getCosmetologistId();
+        if (!$cosmetologistId) return $response->error('Косметолог не найден', 404);
+        
+        $data = $request->getBody();
+        $startTime = $data['start_time'] ?? '09:00';
+        $endTime = $data['end_time'] ?? '18:00';
+        $date = $data['date'] ?? date('Y-m-d');
+        $serviceId = $data['service_id'] ?? null;
+        
+        if (!$serviceId) return $response->error('Укажите service_id', 400);
+        
+        try {
+            // Шаг 1: Получаем длительность услуги
+            $service = \App\Models\Service::findById((int)$serviceId);
+            if (!$service) return $response->error('Услуга не найдена', 404);
+            
+            // Шаг 2: Проверяем занятые слоты в диапазоне
+            $schedule = date('Y-m-d H:i:s', strtotime($date . ' ' . $startTime));
+            $endSchedule = date('Y-m-d H:i:s', strtotime($date . ' ' . $endTime));
+            
+            $conflict = \App\Models\Schedule::checkConflicts($cosmetologistId, $schedule, $endSchedule);
+            
+            if ($conflict) {
+                return $response->error('Время занято', 409);
+            }
+            
+            // Шаг 3: Создаём слоты
+            $result = \App\Models\Schedule::generate(
+                $cosmetologistId, 
+                $startTime, 
+                $endTime, 
+                [$date]
+            );
+            
+            return $response->success($result, 'Слоты созданы');
+            
+        } catch (\Exception $e) {
+            LoggerService::error('Check and generate error: ' . $e->getMessage());
+            return $response->error($e->getMessage(), 500);
+        }
+    }
 }

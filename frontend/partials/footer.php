@@ -3,7 +3,7 @@
         <footer class="footer">
             <div class="container">
                 <div class="footer-bottom">
-                    <p>&copy; 2026 Cosmetic. Все права защищены.</p>
+                    <p>&copy; 2026 Cosmetic - Косметологический портал. Все права защищены.</p>
                 </div>
             </div>
         </footer>

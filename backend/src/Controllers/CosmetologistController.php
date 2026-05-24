@@ -20,27 +20,17 @@ class CosmetologistController
         $headers = getallheaders();
         $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
         
-        LoggerService::info('Auth header: ' . ($authHeader ? substr($authHeader, 0, 50) . '...' : 'NOT FOUND'));
-        
         if (preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
-            $token = $matches[1];
-            
             try {
                 $tokenService = new \App\Services\TokenService();
-                $decoded = $tokenService->verifyAccessToken($token);
+                $decoded = $tokenService->verifyAccessToken($matches[1]);
                 $userId = (int)($decoded['user_id'] ?? 0);
-                
-                LoggerService::info('Token decoded, user_id: ' . $userId);
                 
                 if ($userId > 0) {
                     $user = User::findById($userId);
-                    
                     if ($user && !empty($user['cosmetologist_id'])) {
-                        LoggerService::info('Cosmetologist found, id: ' . $user['cosmetologist_id']);
                         return (int)$user['cosmetologist_id'];
                     }
-                    
-                    LoggerService::warning('User has no cosmetologist_id', ['user_id' => $userId]);
                 }
             } catch (\Exception $e) {
                 LoggerService::error('Token decode error: ' . $e->getMessage());
@@ -50,98 +40,65 @@ class CosmetologistController
         return 0;
     }
 
-    /**
-     * GET /api/cosmetologists
-     */
+    /** GET /api/cosmetologists */
     public function list($request, $response)
     {
         $cosmetologists = Cosmetologist::findAll();
-        
         foreach ($cosmetologists as &$c) {
             $services = Cosmetologist::getServices($c['id']);
             $c['services'] = $services;
             $c['min_price'] = !empty($services) ? min(array_column($services, 'price')) : null;
         }
-        
         return $response->success($cosmetologists);
     }
 
-    /**
-     * GET /api/cosmetologists/{id}
-     */
+    /** GET /api/cosmetologists/{id} */
     public function show($request, $response, $id)
     {
         $cosmetologist = Cosmetologist::findById((int)$id);
-        
-        if (!$cosmetologist) {
-            return $response->error('Косметолог не найден', 404);
-        }
-        
-        $services = Cosmetologist::getServices((int)$id);
+        if (!$cosmetologist) return $response->error('Косметолог не найден', 404);
         
         return $response->success([
             'cosmetologist' => $cosmetologist,
-            'services' => $services
+            'services' => Cosmetologist::getServices((int)$id)
         ]);
     }
 
-    /**
-     * GET /api/cosmetologists/{id}/services
-     */
+    /** GET /api/cosmetologists/{id}/services */
     public function services($request, $response, $id)
     {
         $cosmetologist = Cosmetologist::findById((int)$id);
-        
-        if (!$cosmetologist) {
-            return $response->error('Косметолог не найден', 404);
-        }
-        
-        $services = Cosmetologist::getServices((int)$id);
+        if (!$cosmetologist) return $response->error('Косметолог не найден', 404);
         
         return $response->success([
             'cosmetologist' => $cosmetologist,
-            'services' => $services
+            'services' => Cosmetologist::getServices((int)$id)
         ]);
     }
 
-    /**
-     * GET /api/cosmetologist/statistics
-     */
+    /** GET /api/cosmetologist/statistics */
     public function statistics($request, $response)
     {
         $cosmetologistId = $this->getCosmetologistId($request);
+        if (!$cosmetologistId) return $response->error('Косметолог не найден', 404);
         
-        if (!$cosmetologistId) {
-            return $response->error('Косметолог не найден', 404);
-        }
+        $bookings = Booking::findByCosmetologist($cosmetologistId, date('Y-m-d'));
         
-        $today = date('Y-m-d');
-        $bookings = Booking::findByCosmetologist($cosmetologistId, $today);
-        
-        $stats = [
+        return $response->success([
             'today_bookings' => count($bookings),
             'pending' => count(array_filter($bookings, fn($b) => $b['status'] === 'pending')),
             'confirmed' => count(array_filter($bookings, fn($b) => $b['status'] === 'confirmed')),
             'completed_today' => count(array_filter($bookings, fn($b) => $b['status'] === 'completed')),
             'cancelled' => count(array_filter($bookings, fn($b) => $b['status'] === 'cancelled')),
-            'today_revenue' => array_sum(array_map(function($b) {
-                return $b['status'] === 'completed' ? (float)($b['price'] ?? 0) : 0;
-            }, $bookings))
-        ];
-        
-        return $response->success($stats);
+            'today_revenue' => array_sum(array_map(fn($b) => $b['status'] === 'completed' ? (float)($b['price'] ?? 0) : 0, $bookings))
+        ]);
     }
 
-    /**
-     * GET /api/cosmetologist/bookings
-     */
+    /** GET /api/cosmetologist/bookings */
     public function bookings($request, $response)
     {
         $cosmetologistId = $this->getCosmetologistId($request);
-        
-        if (!$cosmetologistId) {
-            return $response->error('Косметолог не найден', 404);
-        }
+        if (!$cosmetologistId) return $response->error('Косметолог не найден', 404);
         
         $date = $request->getQueryParam('date');
         $status = $request->getQueryParam('status');
@@ -165,14 +122,10 @@ class CosmetologistController
                     WHERE b.cosmetologist_id = ? AND DATE(b.schedule) BETWEEN ? AND ?
                     ORDER BY b.schedule";
             
-            $monthBookings = Database::fetchAll($sql, [$cosmetologistId, $startDate, $endDate], 'iss');
-            return $response->success(['month_bookings' => $monthBookings]);
+            return $response->success(['month_bookings' => Database::fetchAll($sql, [$cosmetologistId, $startDate, $endDate], 'iss')]);
         }
         
-        $bookings = Booking::findByCosmetologistPaginated(
-            $cosmetologistId, $date, $status, $limit, $offset
-        );
-        
+        $bookings = Booking::findByCosmetologistPaginated($cosmetologistId, $date, $status, $limit, $offset);
         $total = Booking::countByCosmetologist($cosmetologistId, $date, $status);
         
         return $response->success([
@@ -184,13 +137,10 @@ class CosmetologistController
         ]);
     }
 
-    /**
-     * PUT /api/cosmetologist/bookings/{id}/confirm
-     */
+    /** PUT /api/cosmetologist/bookings/{id}/confirm */
     public function confirmBooking($request, $response, $id)
     {
         $cosmetologistId = $this->getCosmetologistId($request);
-        
         $booking = Booking::findById((int)$id);
         
         if (!$booking || (int)$booking['cosmetologist_id'] !== $cosmetologistId) {
@@ -198,19 +148,13 @@ class CosmetologistController
         }
         
         Booking::updateStatus((int)$id, 'confirmed');
-        
-        LoggerService::info('Booking confirmed', ['booking_id' => $id]);
-        
         return $response->success(null, 'Запись подтверждена');
     }
 
-    /**
-     * PUT /api/cosmetologist/bookings/{id}/complete
-     */
+    /** PUT /api/cosmetologist/bookings/{id}/complete */
     public function completeBooking($request, $response, $id)
     {
         $cosmetologistId = $this->getCosmetologistId($request);
-        
         $booking = Booking::findById((int)$id);
         
         if (!$booking || (int)$booking['cosmetologist_id'] !== $cosmetologistId) {
@@ -218,27 +162,17 @@ class CosmetologistController
         }
         
         Booking::updateStatus((int)$id, 'completed');
-        
-        LoggerService::info('Booking completed', ['booking_id' => $id]);
-        
         return $response->success(null, 'Запись завершена');
     }
 
-    /**
-     * GET /api/cosmetologist/services
-     */
+    /** GET /api/cosmetologist/services */
     public function getServices($request, $response)
     {
         $cosmetologistId = $this->getCosmetologistId($request);
-        
-        $services = Service::findByCosmetologist($cosmetologistId);
-        
-        return $response->success(['services' => $services]);
+        return $response->success(['services' => Service::findByCosmetologist($cosmetologistId)]);
     }
 
-    /**
-     * POST /api/services
-     */
+    /** POST /api/services */
     public function createService($request, $response)
     {
         $cosmetologistId = $this->getCosmetologistId($request);
@@ -256,13 +190,10 @@ class CosmetologistController
         return $response->success(['service_id' => $serviceId], 'Услуга создана');
     }
 
-    /**
-     * PUT /api/services/{id}
-     */
+    /** PUT /api/services/{id} */
     public function updateService($request, $response, $id)
     {
         $data = $request->getBody();
-        
         Service::update((int)$id, [
             'service' => $data['service'] ?? '',
             'duration' => $data['duration'] ?? '01:00:00',
@@ -270,56 +201,36 @@ class CosmetologistController
             'price' => (float)($data['price'] ?? 0),
             'description' => $data['description'] ?? null
         ]);
-        
         return $response->success(null, 'Услуга обновлена');
     }
 
-    /**
-     * DELETE /api/services/{id}
-     */
+    /** DELETE /api/services/{id} */
     public function deleteService($request, $response, $id)
     {
         Service::delete((int)$id);
-        
         return $response->success(null, 'Услуга удалена');
     }
 
-    /**
-     * GET /api/cosmetologist/materials
-     */
+    /** GET /api/cosmetologist/materials */
     public function materials($request, $response)
     {
         $cosmetologistId = $this->getCosmetologistId($request);
-        
-        $materials = Material::getAll($cosmetologistId);
-        
-        return $response->success(['materials' => $materials]);
+        return $response->success(['materials' => Material::getAll($cosmetologistId)]);
     }
 
-    /**
-     * POST /api/cosmetologist/materials
-     */
+    /** POST /api/cosmetologist/materials */
     public function addMaterial($request, $response)
     {
         $cosmetologistId = $this->getCosmetologistId($request);
         $data = $request->getBody();
         
-        $materialId = Material::create(
-            $data['material'] ?? '',
-            $cosmetologistId,
-            $data['is_stock'] ?? false,
-            $data['is_mutable'] ?? true
-        );
-        
+        $materialId = Material::create($data['material'] ?? '', $cosmetologistId, $data['is_stock'] ?? false, $data['is_mutable'] ?? true);
         return $response->success(['material_id' => $materialId], 'Материал добавлен');
     }
 
-    /**
-     * PUT /api/cosmetologist/materials/{id}
-     */
+    /** PUT /api/cosmetologist/materials/{id} */
     public function updateMaterial($request, $response, $id)
     {
-        $cosmetologistId = $this->getCosmetologistId($request);
         $data = $request->getBody();
         
         if (isset($data['is_stock']) && !isset($data['material'])) {
@@ -327,13 +238,10 @@ class CosmetologistController
         } else {
             Material::update((int)$id, $data['material'] ?? '', $data['is_stock'] ?? false, $data['is_mutable'] ?? true);
         }
-        
         return $response->success(null, 'Материал обновлен');
     }
 
-    /**
-     * DELETE /api/cosmetologist/materials/{id}
-     */
+    /** DELETE /api/cosmetologist/materials/{id} */
     public function deleteMaterial($request, $response, $id)
     {
         try {
@@ -344,85 +252,52 @@ class CosmetologistController
         }
     }
 
-    /**
-     * POST /api/cosmetologist/procurements
-     */
+    /** POST /api/cosmetologist/procurements */
     public function addProcurement($request, $response)
     {
         $cosmetologistId = $this->getCosmetologistId($request);
         $data = $request->getBody();
         
-        $result = Procurement::create(
-            (int)($data['material_id'] ?? 0),
-            (float)($data['price'] ?? 0),
-            $cosmetologistId
-        );
-        
-        if ($result) {
+        if (Procurement::create((int)($data['material_id'] ?? 0), (float)($data['price'] ?? 0), $cosmetologistId)) {
             return $response->success(null, 'Закупка добавлена');
         }
-        
         return $response->error('Ошибка добавления закупки', 400);
     }
 
-    /**
-     * GET /api/cosmetologist/clients
-     */
+    /** GET /api/cosmetologist/clients */
     public function clients($request, $response)
     {
         $cosmetologistId = $this->getCosmetologistId($request);
-        
-        if (!$cosmetologistId) {
-            return $response->error('Косметолог не найден', 404);
-        }
+        if (!$cosmetologistId) return $response->error('Косметолог не найден', 404);
         
         $search = $request->getQueryParam('search', '');
         $sort = $request->getQueryParam('sort', 'recent');
         
-        $clients = Client::getByCosmetologistId($cosmetologistId, $search, $sort);
-        
-        return $response->success(['clients' => $clients]);
+        return $response->success(['clients' => Client::getByCosmetologistId($cosmetologistId, $search, $sort)]);
     }
 
-    /**
-     * GET /api/cosmetologist/clients/{id}
-     */
+    /** GET /api/cosmetologist/clients/{id} */
     public function clientDetails($request, $response, $id)
     {
         $cosmetologistId = $this->getCosmetologistId($request);
-        
-        if (!$cosmetologistId) {
-            return $response->error('Косметолог не найден', 404);
-        }
+        if (!$cosmetologistId) return $response->error('Косметолог не найден', 404);
         
         $client = Client::findInView((int)$id, $cosmetologistId);
-        
-        if (!$client) {
-            return $response->error('Клиент не найден или недоступен', 404);
-        }
-        
-        $history = Client::getHistoryWithCosmetologist((int)$id, $cosmetologistId);
+        if (!$client) return $response->error('Клиент не найден или недоступен', 404);
         
         return $response->success([
             'client' => $client,
-            'history' => $history
+            'history' => Client::getHistoryWithCosmetologist((int)$id, $cosmetologistId)
         ]);
     }
 
-    /**
-     * POST /api/cosmetologist/clients
-     */
+    /** POST /api/cosmetologist/clients */
     public function addClient($request, $response)
     {
         $cosmetologistId = $this->getCosmetologistId($request);
-        
-        if (!$cosmetologistId) {
-            return $response->error('Косметолог не найден', 404);
-        }
+        if (!$cosmetologistId) return $response->error('Косметолог не найден', 404);
         
         $data = $request->getBody();
-        
-        LoggerService::info('Adding client', ['cosmetologist_id' => $cosmetologistId, 'data' => $data]);
         
         try {
             $clientId = Client::create([
@@ -432,37 +307,25 @@ class CosmetologistController
                 'communication' => $data['communication'] ?? 'phone'
             ]);
             
-            if ($clientId) {
-                return $response->success(['client_id' => $clientId], 'Клиент добавлен');
-            }
-            
+            if ($clientId) return $response->success(['client_id' => $clientId], 'Клиент добавлен');
             return $response->error('Ошибка добавления клиента', 400);
-            
         } catch (\Exception $e) {
-            LoggerService::error('Add client exception: ' . $e->getMessage());
+            LoggerService::error('Add client failed: ' . $e->getMessage());
             return $response->error($e->getMessage(), 500);
         }
     }
 
-    /**
-     * PUT /api/cosmetologist/clients/{id}
-     */
+    /** PUT /api/cosmetologist/clients/{id} */
     public function updateClient($request, $response, $id)
     {
         $cosmetologistId = $this->getCosmetologistId($request);
-        
-        if (!$cosmetologistId) {
-            return $response->error('Косметолог не найден', 404);
-        }
+        if (!$cosmetologistId) return $response->error('Косметолог не найден', 404);
         
         $data = $request->getBody();
         
         try {
             $client = Client::findInView((int)$id, $cosmetologistId);
-            
-            if (!$client) {
-                return $response->error('Клиент не найден или недоступен', 404);
-            }
+            if (!$client) return $response->error('Клиент не найден или недоступен', 404);
             
             Client::update((int)$id, [
                 'fullname' => $data['fullname'] ?? '',
@@ -470,19 +333,14 @@ class CosmetologistController
                 'communication' => $data['communication'] ?? 'phone'
             ]);
             
-            LoggerService::info('Client updated', ['client_id' => $id]);
-            
             return $response->success(null, 'Клиент обновлен');
-            
         } catch (\Exception $e) {
-            LoggerService::error('Update client error: ' . $e->getMessage());
+            LoggerService::error('Update client failed: ' . $e->getMessage());
             return $response->error($e->getMessage(), 400);
         }
     }
 
-    /**
-     * GET /api/cosmetologist/reports
-     */
+    /** GET /api/cosmetologist/reports */
     public function reports($request, $response)
     {
         $cosmetologistId = $this->getCosmetologistId($request);
@@ -493,7 +351,6 @@ class CosmetologistController
         
         $totalRevenue = 0;
         $completedCount = 0;
-        
         foreach ($bookings as $b) {
             if ($b['status'] === 'completed') {
                 $totalRevenue += (float)($b['price'] ?? 0);

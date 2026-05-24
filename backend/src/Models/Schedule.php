@@ -45,26 +45,14 @@ class Schedule
 
     public static function getAvailableSlots(string $date, int $serviceId): array
     {
-        error_log("=== Schedule::getAvailableSlots ===");
-        error_log("date: " . $date);
-        error_log("serviceId: " . $serviceId);
-        
-        $sql = "CALL sp_get_available_slots(?, ?)";
-        
-        error_log("SQL: " . $sql);
-        
-        $result = Database::fetchAll($sql, [$date, $serviceId], 'si') ?: [];
-        
-        error_log("Result count: " . count($result));
-        error_log("Result: " . json_encode($result));
-        
-        return $result;
+        return Database::callProcedureAndFetch('sp_get_available_slots', [$date, $serviceId], 'si') ?: [];
     }
+    
 
     public static function checkTimeAvailable(int $serviceId, string $schedule): array
     {
-        $sql = "CALL sp_check_time_available(?, ?)";
-        return Database::fetch($sql, [$serviceId, $schedule], 'is') ?: [];
+        $rows = Database::callProcedureAndFetch('sp_check_time_available', [$serviceId, $schedule], 'is');
+        return $rows[0] ?? [];
     }
 
     public static function getAllByDate(string $date): array
@@ -119,14 +107,17 @@ class Schedule
     }
 
     /**
-     * 🔥 Получить данные для календаря (только записи из Books)
+     * Получить данные для календаря (только записи из Books)
      */
     public static function getCalendarData(string $startDate, string $endDate): array
     {
-        $sql = "CALL sp_get_calendar_data(?, ?)";
-        $bookings = Database::fetchAll($sql, [$startDate, $endDate], 'ss') ?: [];
+        $bookings = Database::callProcedureAndFetch('sp_get_calendar_data', [$startDate, $endDate], 'ss') ?: [];
+        
         $grouped = [];
-        foreach ($bookings as $b) { $grouped[$b['date']][] = $b; }
+        foreach ($bookings as $b) {
+            $grouped[$b['date']][] = $b;
+        }
+        
         return $grouped;
     }
 
@@ -179,5 +170,18 @@ class Schedule
                        SUM(CASE WHEN is_booked = 2 THEN 1 ELSE 0 END) AS deactivated
                 FROM Schedule WHERE cosmetologist_id = ? AND DATE(begin_time) = ?";
         return Database::fetch($sql, [$cosmetologistId, $date], 'is') ?: [];
+    }
+
+    public static function checkConflicts(int $cosmetologistId, string $startTime, string $endTime): bool
+    {
+        $sql = "SELECT COUNT(*) as cnt FROM Schedule 
+                WHERE cosmetologist_id = ? 
+                AND is_booked = 1 
+                AND begin_time < ? 
+                AND end_time > ?";
+        
+        $result = Database::fetch($sql, [$cosmetologistId, $endTime, $startTime], 'iss');
+        
+        return ($result['cnt'] ?? 0) > 0;
     }
 }

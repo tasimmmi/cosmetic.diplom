@@ -1,17 +1,38 @@
 <?php
 $pageTitle = 'Мои записи';
 $extraStyles = '
-    .booking-card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border-left: 4px solid; }
-    .booking-card.status-pending { border-left-color: #ffc107; }
-    .booking-card.status-confirmed { border-left-color: #28a745; }
-    .booking-card.status-completed { border-left-color: #17a2b8; }
-    .booking-card.status-cancelled { border-left-color: #dc3545; }
-    .booking-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-    .booking-status { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; }
-    .status-pending .booking-status { background: #fff3cd; color: #856404; }
-    .status-confirmed .booking-status { background: #d4edda; color: #155724; }
-    .status-completed .booking-status { background: #d1ecf1; color: #0c5460; }
-    .status-cancelled .booking-status { background: #f8d7da; color: #721c24; }
+    .dashboard-tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+    .tab-btn { padding: 6px 14px; border: 1px solid #ddd; border-radius: 20px; cursor: pointer; font-size: 12px; background: white; color: #666; transition: all 0.15s; }
+    .tab-btn:hover { border-color: #667eea; color: #667eea; }
+    .tab-btn.active { background: #667eea; color: white; border-color: #667eea; }
+    
+    .booking-row {
+        display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+        border-bottom: 1px solid #f0f0f0; transition: background 0.15s; position: relative;
+    }
+    .booking-row:hover { background: #fafbff; }
+    .booking-row:last-child { border-bottom: none; }
+    .booking-row.needs-action { background: #fff8e1; }
+    
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .booking-date-col { min-width: 50px; text-align: center; font-size: 12px; color: #888; line-height: 1.4; flex-shrink: 0; }
+    .booking-date-col .booking-time { font-weight: 700; color: #333; font-size: 13px; }
+    .booking-cosm-col { min-width: 130px; line-height: 1.4; flex-shrink: 0; }
+    .booking-cosm-name { font-weight: 600; color: #333; font-size: 13px; }
+    .booking-cosm-addr { font-size: 11px; color: #aaa; }
+    .booking-service-name { color: #555; flex: 1; min-width: 100px; font-size: 13px; }
+    .booking-price { color: #333; font-weight: 500; white-space: nowrap; font-size: 13px; min-width: 75px; text-align: right; flex-shrink: 0; }
+    .booking-actions-cell { width: 60px; flex-shrink: 0; display: flex; justify-content: flex-end; }
+    .booking-actions-inline { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
+    .booking-row:hover .booking-actions-inline { opacity: 1; }
+    .booking-row.needs-action .booking-actions-inline { opacity: 1; }
+    
+    .btn-icon { width: 24px; height: 24px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 10px; transition: all 0.15s; color: white; flex-shrink: 0; position: relative; }
+    .btn-icon:hover { transform: scale(1.2); }
+    .btn-icon::after { content: attr(title); position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 3px 8px; border-radius: 4px; font-size: 10px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.15s; font-family: Arial, sans-serif; font-weight: normal; }
+    .btn-icon:hover::after { opacity: 1; }
+    .btn-icon-confirm { background: #28a745; }
+    .btn-icon-cancel { background: #dc3545; }
 ';
 
 include __DIR__ . '/../partials/header.php';
@@ -22,17 +43,7 @@ include __DIR__ . '/../partials/header.php';
         <?php include __DIR__ . '/../partials/sidebar-client.php'; ?>
         
         <div class="dashboard-content">
-            <div class="dashboard-header">
-                <h1>Мои записи</h1>
-                
-                <div class="dashboard-tabs">
-                    <button class="tab-btn active" data-status="all">Все</button>
-                    <button class="tab-btn" data-status="pending">Ожидают</button>
-                    <button class="tab-btn" data-status="confirmed">Подтверждены</button>
-                    <button class="tab-btn" data-status="completed">Завершены</button>
-                    <button class="tab-btn" data-status="cancelled">Отменены</button>
-                </div>
-            </div>
+            <h1>Предстоящие записи</h1>
             
             <div id="bookings-list">
                 <div class="loading-container">
@@ -44,109 +55,88 @@ include __DIR__ . '/../partials/header.php';
     </div>
 </div>
 
-<script>
-const token = localStorage.getItem('access_token');
-let bookings = [];
-let currentStatus = 'all';
+<script src="/frontend/js/auth-check.js"></script>
 
+<script>
 async function loadBookings() {
-    const container = document.getElementById('bookings-list');
+    var container = document.getElementById('bookings-list');
     
     try {
-        const response = await fetch('/backend/public/api/users/bookings', {
-            headers: { 'Authorization': 'Bearer ' + token }
-        });
-        const data = await response.json();
+        var response = await AUTH.fetch('/backend/public/api/users/bookings');
+        var data = await response.json();
         
         if (data.success) {
-            bookings = data.data.bookings || [];
-            renderBookings();
+            var bookings = (data.data.bookings || []).filter(function(b) {
+                return b.status === 'pending' || b.status === 'confirmed';
+            });
+            renderBookings(bookings);
         }
     } catch (error) {
         container.innerHTML = '<p class="text-danger">Ошибка загрузки</p>';
     }
 }
 
-function renderBookings() {
-    const container = document.getElementById('bookings-list');
-    const filtered = currentStatus === 'all' 
-        ? bookings 
-        : bookings.filter(b => b.status === currentStatus);
+function renderBookings(bookings) {
+    var container = document.getElementById('bookings-list');
     
-    if (filtered.length === 0) {
-        container.innerHTML = '<p class="text-muted text-center py-5">Нет записей</p>';
+    if (bookings.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center py-4">Нет предстоящих записей</p>';
         return;
     }
     
-    const statusNames = {
-        pending: 'Ожидает подтверждения',
-        confirmed: 'Подтверждена',
-        completed: 'Завершена',
-        cancelled: 'Отменена'
-    };
+    var statusColors = { pending: '#f0ad4e', confirmed: '#5bc0de' };
     
-    container.innerHTML = filtered.map(b => `
-        <div class="booking-card status-${b.status}">
-            <div class="booking-header">
-                <h3>${escapeHtml(b.cosmetologist_name)}</h3>
-                <span class="booking-status">${statusNames[b.status] || b.status}</span>
-            </div>
-            <div class="booking-body">
-                <p><i class="fas fa-cut"></i> ${escapeHtml(b.service_name)}</p>
-                <p><i class="fas fa-calendar"></i> ${formatDateTime(b.schedule)}</p>
-                <p><i class="fas fa-clock"></i> ${b.duration || '—'}</p>
-                <p><i class="fas fa-tag"></i> <strong>${b.price} BYN</strong></p>
-                ${b.address ? `<p><i class="fas fa-map-marker-alt"></i> ${escapeHtml(b.address)}</p>` : ''}
-            </div>
-            ${(b.status === 'pending' || b.status === 'confirmed') ? `
-                <div class="booking-footer">
-                    <button class="btn btn-outline-danger btn-sm" onclick="cancelBooking(${b.id})">
-                        <i class="fas fa-times"></i> Отменить
-                    </button>
-                </div>
-            ` : ''}
-        </div>
-    `).join('');
+    var html = '';
+    bookings.forEach(function(b) {
+        var dt = new Date(b.schedule);
+        var dateStr = dt.toLocaleDateString('ru-RU', {day:'numeric',month:'short'});
+        var timeStr = dt.toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'});
+        var addr = b.address || '';
+        var needsAction = b.status === 'pending';
+        
+        html += '<div class="booking-row' + (needsAction ? ' needs-action' : '') + '">' +
+            '<span class="status-dot" style="background:' + (statusColors[b.status]||'#999') + '" title="' + b.status + '"></span>' +
+            '<span class="booking-date-col">' + dateStr + '<br><span class="booking-time">' + timeStr + '</span></span>' +
+            '<span class="booking-cosm-col">' +
+                '<span class="booking-cosm-name">' + esc(b.cosmetologist_name) + '</span>' +
+                (addr ? '<br><span class="booking-cosm-addr">' + esc(addr) + '</span>' : '') +
+            '</span>' +
+            '<span class="booking-service-name">' + esc(b.service_name) + '</span>' +
+            '<span class="booking-price">' + (b.price||0) + ' BYN</span>' +
+            '<span class="booking-actions-cell"><span class="booking-actions-inline">';
+        
+        if (b.status === 'pending') {
+            html += '<button class="btn-icon btn-icon-confirm" onclick="confirmBooking(' + b.id + ')" title="Подтвердить"><i class="fas fa-check"></i></button>';
+        }
+        html += '<button class="btn-icon btn-icon-cancel" onclick="cancelBooking(' + b.id + ')" title="Отменить"><i class="fas fa-times"></i></button>';
+        
+        html += '</span></span></div>';
+    });
+    container.innerHTML = html;
 }
 
-function formatDateTime(datetime) {
-    const d = new Date(datetime);
-    return d.toLocaleString('ru-RU', { 
-        day: '2-digit', month: '2-digit', year: 'numeric',
-        hour: '2-digit', minute: '2-digit'
-    });
+async function confirmBooking(id) {
+    if (!confirm('Подтвердить запись?')) return;
+    try {
+        await AUTH.fetch('/backend/public/api/bookings/' + id + '/confirm', { method:'PUT' });
+        loadBookings();
+    } catch (e) { alert('Ошибка'); }
 }
 
 async function cancelBooking(id) {
     if (!confirm('Отменить запись?')) return;
-    
     try {
-        await fetch(`/backend/public/api/bookings/${id}/cancel`, {
-            method: 'PUT',
-            headers: { 'Authorization': 'Bearer ' + token }
-        });
+        await AUTH.fetch('/backend/public/api/bookings/' + id + '/cancel', { method:'PUT' });
         loadBookings();
-    } catch (error) {
-        alert('Ошибка отмены');
-    }
+    } catch (e) { alert('Ошибка'); }
 }
 
-function escapeHtml(text) {
+function esc(text) {
     if (!text) return '';
-    const div = document.createElement('div');
+    var div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
-
-// Вкладки
-document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        currentStatus = btn.dataset.status;
-        renderBookings();
-    });
-});
 
 loadBookings();
 </script>

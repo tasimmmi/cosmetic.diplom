@@ -65,7 +65,7 @@ class EmailService
      */
     public function sendPasswordResetEmail($email, $token, $name)
     {
-        $resetLink = (isset($_ENV['CLIENT_URL']) ? $_ENV['CLIENT_URL'] : 'http://localhost:3000') . "/reset-password.html?token=$token";
+        $resetLink = (isset($_ENV['CLIENT_URL']) ? $_ENV['CLIENT_URL'] : 'http://localhost:3000') . "/reset-password.php?token=$token";
         
         $subject = 'Сброс пароля - Cosmetic';
         

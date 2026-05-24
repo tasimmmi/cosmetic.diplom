@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= $pageTitle ?? 'Cosmetic' ?> - Cosmetic</title>
+    <title><?= $pageTitle ?? 'Cosmetic' ?> - Косметологический портал</title>
 
     <script src="js/roleGuard.js"></script>
 
@@ -22,7 +22,7 @@
         <header class="header-simple">
             <div class="container">
                 <a href="/frontend/" class="logo">
-                    <span>Cosmetic</span>
+                    <span>Косметологический портал</span>
                 </a>
             </div>
         </header>

@@ -4,7 +4,6 @@ namespace App\Controllers;
 use App\Models\Client;
 use App\Models\Cosmetologist;
 use App\Models\Booking;
-use App\Models\Service;
 
 class AliceClientController
 {
@@ -12,286 +11,106 @@ class AliceClientController
     {
         $command = mb_strtolower(trim($data['request']['command'] ?? ''));
         $session = $data['session'] ?? [];
-        $state = $session['state'] ?? [];
         $clientId = $user['client_id'] ?? null;
         
-        if (!$clientId) {
-            return $this->textResponse('Профиль клиента не найден.', true);
+        if (!$clientId) return AliceController::reply('Профиль клиента не найден.', $session, true);
+        
+        if (AliceController::match($command, ['мои записи', 'записи', 'ближайшие'])) {
+            return $this->handleBookings($data, $user);
+        }
+        if (AliceController::match($command, ['отменить', 'отмена'])) {
+            return $this->handleCancelBooking($data, $user);
+        }
+        if (AliceController::match($command, ['подтвердить'])) {
+            return $this->handleConfirmBooking($data, $user);
+        }
+        if (AliceController::match($command, ['косметолог', 'специалист'])) {
+            return $this->handleCosmetologists($data, $user);
+        }
+        if (AliceController::match($command, ['услуги', 'прайс', 'цены'])) {
+            return $this->handleServices($data, $user);
         }
         
-        // Записаться
-        if ($this->matchCommand($command, ['записаться', 'запись', 'запиши', 'хочу записаться'])) {
-            return $this->handleBooking($data, $user, $clientId);
-        }
-        
-        // Мои записи
-        if ($this->matchCommand($command, ['мои записи', 'записи', 'ближайшие', 'предстоящие'])) {
-            return $this->handleMyBookings($clientId);
-        }
-        
-        // Подтвердить запись
-        if ($this->matchCommand($command, ['подтвердить', 'подтверждаю'])) {
-            return $this->handleConfirmBooking($data, $clientId);
-        }
-        
-        // Отменить запись
-        if ($this->matchCommand($command, ['отменить', 'отмена'])) {
-            return $this->handleCancelBooking($data, $clientId);
-        }
-        
-        // Косметологи
-        if ($this->matchCommand($command, ['косметолог', 'косметологи', 'специалист'])) {
-            return $this->handleCosmetologists();
-        }
-        
-        // Услуги
-        if ($this->matchCommand($command, ['услуги', 'прайс', 'цены'])) {
-            return $this->handleServices();
-        }
-        
-        return $this->textResponse('Неизвестная команда. Скажите «Помощь».', false);
+        return AliceController::reply('Не поняла. Скажите «Помощь».', $session);
     }
-
-    private function handleBooking(array $data, array $user, int $clientId): array
+    
+    public function handleBookings(array $data, array $user): array
     {
         $session = $data['session'] ?? [];
-        $state = $session['state'] ?? [];
-        $command = mb_strtolower(trim($data['request']['command'] ?? ''));
+        $clientId = $user['client_id'];
         
-        // Шаг 1: выбор косметолога (если не указан — предлагаем того, к кому уже ходили)
-        if (empty($state['cosmetologist_id'])) {
-            // Ищем косметолога по имени в команде
-            $cosmetologist = $this->findCosmetologistByName($command);
-            
-            if ($cosmetologist) {
-                $state['cosmetologist_id'] = $cosmetologist['id'];
-                $state['cosmetologist_name'] = $cosmetologist['first_name'] . ' ' . $cosmetologist['last_name'];
-                $session['state'] = $state;
-            } else {
-                // Предлагаем предыдущего косметолога
-                $lastBooking = Booking::findByClientId($clientId);
-                $prevCosmId = !empty($lastBooking) ? $lastBooking[0]['cosmetologist_id'] : null;
-                
-                $cosmetologists = Cosmetologist::findAll();
-                $buttons = [];
-                
-                foreach ($cosmetologists as $c) {
-                    $name = $c['first_name'] . ' ' . $c['last_name'];
-                    $buttons[] = ['title' => $name, 'hide' => true];
-                }
-                
-                $state['step'] = 'choose_cosmetologist';
-                $session['state'] = $state;
-                
-                $text = 'К какому косметологу хотите записаться?';
-                if ($prevCosmId) {
-                    $prevCosm = Cosmetologist::findById($prevCosmId);
-                    if ($prevCosm) {
-                        $text .= ' Например, к ' . $prevCosm['first_name'] . ' ' . $prevCosm['last_name'] . '?';
-                    }
-                }
-                
-                return [
-                    'response' => [
-                        'text' => $text,
-                        'tts' => 'К какому косметологу?',
-                        'buttons' => $buttons,
-                        'end_session' => false
-                    ],
-                    'session' => $session,
-                    'version' => '1.0'
-                ];
-            }
-        }
-        
-        // Шаг 2: выбор услуги
-        if (empty($state['service_id'])) {
-            $services = Cosmetologist::getServices($state['cosmetologist_id']);
-            $service = $this->findServiceByName($command, $services);
-            
-            if ($service) {
-                $state['service_id'] = $service['id'];
-                $state['service_name'] = $service['service'];
-                $session['state'] = $state;
-            } else {
-                $buttons = [];
-                foreach ($services as $s) {
-                    $buttons[] = ['title' => $s['service'], 'hide' => true];
-                }
-                
-                $state['step'] = 'choose_service';
-                $session['state'] = $state;
-                
-                $text = 'У косметолога ' . $state['cosmetologist_name'] . ' доступны: ' 
-                      . implode(', ', array_column($services, 'service')) . '. Какую услугу выберете?';
-                
-                return [
-                    'response' => [
-                        'text' => $text,
-                        'tts' => 'Какую услугу выберете?',
-                        'buttons' => $buttons,
-                        'end_session' => false
-                    ],
-                    'session' => $session,
-                    'version' => '1.0'
-                ];
-            }
-        }
-        
-        // TODO: выбор даты и времени, создание записи
-        return $this->textResponse('Функция записи в разработке.', true);
-    }
-
-    private function handleMyBookings(int $clientId): array
-    {
         $bookings = Booking::findByClientId($clientId);
-        
-        if (empty($bookings)) {
-            return $this->textResponse('У вас пока нет записей.', true);
-        }
+        if (empty($bookings)) return AliceController::reply('У вас нет записей.', $session, true);
         
         $lines = [];
         foreach (array_slice($bookings, 0, 5) as $b) {
-            $date = date('d.m', strtotime($b['schedule']));
-            $time = date('H:i', strtotime($b['schedule']));
-            $status = ['pending' => 'ожидает', 'confirmed' => 'подтверждена', 'completed' => 'завершена', 'cancelled' => 'отменена'][$b['status']] ?? $b['status'];
-            $lines[] = "{$date} в {$time} — {$b['service_name']} ({$status})";
+            $d = date('d.m', strtotime($b['schedule']));
+            $t = date('H:i', strtotime($b['schedule']));
+            $s = ['pending' => 'ожидает', 'confirmed' => 'подтверждена', 'completed' => 'завершена', 'cancelled' => 'отменена'][$b['status']] ?? $b['status'];
+            $lines[] = "{$d} в {$t} — {$b['service_name']} ({$s})";
         }
         
-        return $this->textResponse('Ваши записи: ' . implode('. ', $lines) . '.', true);
+        return AliceController::reply('Ваши записи: ' . implode('. ', $lines) . '.', $session, true);
     }
-
-    private function handleConfirmBooking(array $data, int $clientId): array
+    
+    public function handleCancelBooking(array $data, array $user): array
     {
-        $pending = Booking::findByClientId($clientId, 'pending');
+        $session = $data['session'] ?? [];
+        $clientId = $user['client_id'];
         
-        if (empty($pending)) {
-            return $this->textResponse('У вас нет записей, ожидающих подтверждения.', true);
-        }
-        
-        if (count($pending) === 1) {
-            $b = $pending[0];
-            Booking::updateStatus($b['id'], 'confirmed');
-            $date = date('d.m', strtotime($b['schedule']));
-            $time = date('H:i', strtotime($b['schedule']));
-            return $this->textResponse("Запись на {$date} в {$time} подтверждена.", true);
-        }
-        
-        $buttons = [];
-        foreach ($pending as $b) {
-            $date = date('d.m H:i', strtotime($b['schedule']));
-            $buttons[] = ['title' => $date, 'hide' => true];
-        }
-        
-        return [
-            'response' => [
-                'text' => 'У вас несколько записей. Какую подтвердить?',
-                'tts' => 'Какую запись подтвердить?',
-                'buttons' => $buttons,
-                'end_session' => false
-            ],
-            'session' => $data['session'] ?? [],
-            'version' => '1.0'
-        ];
-    }
-
-    private function handleCancelBooking(array $data, int $clientId): array
-    {
         $active = array_merge(
             Booking::findByClientId($clientId, 'pending'),
             Booking::findByClientId($clientId, 'confirmed')
         );
         
-        if (empty($active)) {
-            return $this->textResponse('У вас нет активных записей для отмены.', true);
-        }
-        
+        if (empty($active)) return AliceController::reply('Нет активных записей.', $session, true);
         if (count($active) === 1) {
             Booking::updateStatus($active[0]['id'], 'cancelled');
-            $date = date('d.m H:i', strtotime($active[0]['schedule']));
-            return $this->textResponse("Запись на {$date} отменена.", true);
+            return AliceController::reply('Запись отменена.', $session, true);
         }
         
-        $buttons = [];
-        foreach ($active as $b) {
-            $date = date('d.m H:i', strtotime($b['schedule']));
-            $buttons[] = ['title' => $date, 'hide' => true];
+        $buttons = array_map(fn($b) => ['title' => date('d.m H:i', strtotime($b['schedule'])), 'hide' => true], $active);
+        return AliceController::reply('Какую запись отменить?', $session, false, $buttons);
+    }
+    
+    public function handleConfirmBooking(array $data, array $user): array
+    {
+        $session = $data['session'] ?? [];
+        $clientId = $user['client_id'];
+        
+        $pending = Booking::findByClientId($clientId, 'pending');
+        if (empty($pending)) return AliceController::reply('Нет записей для подтверждения.', $session, true);
+        if (count($pending) === 1) {
+            Booking::updateStatus($pending[0]['id'], 'confirmed');
+            return AliceController::reply('Запись подтверждена.', $session, true);
         }
         
-        return [
-            'response' => [
-                'text' => 'Какую запись отменить?',
-                'tts' => 'Какую запись отменить?',
-                'buttons' => $buttons,
-                'end_session' => false
-            ],
-            'session' => $data['session'] ?? [],
-            'version' => '1.0'
-        ];
+        $buttons = array_map(fn($b) => ['title' => date('d.m H:i', strtotime($b['schedule'])), 'hide' => true], $pending);
+        return AliceController::reply('Какую запись подтвердить?', $session, false, $buttons);
     }
-
-    private function handleCosmetologists(): array
+    
+    public function handleCosmetologists(array $data, array $user): array
     {
-        $cosmetologists = Cosmetologist::findAll();
-        if (empty($cosmetologists)) {
-            return $this->textResponse('Нет доступных косметологов.', true);
-        }
-        $lines = array_map(function($c) {
-            return $c['first_name'] . ' ' . $c['last_name'] . ' — ' . ($c['address'] ?? 'адрес не указан');
-        }, $cosmetologists);
-        return $this->textResponse(implode('. ', $lines) . '.', true);
+        $session = $data['session'] ?? [];
+        $cosms = Cosmetologist::findAll();
+        if (empty($cosms)) return AliceController::reply('Нет доступных косметологов.', $session, true);
+        
+        $lines = array_map(fn($c) => $c['first_name'] . ' ' . $c['last_name'], $cosms);
+        return AliceController::reply(implode('. ', $lines) . '.', $session, true);
     }
-
-    private function handleServices(): array
+    
+    public function handleServices(array $data, array $user): array
     {
-        $cosmetologists = Cosmetologist::findAll();
+        $session = $data['session'] ?? [];
+        $cosms = Cosmetologist::findAll();
         $lines = [];
-        foreach ($cosmetologists as $c) {
+        foreach ($cosms as $c) {
             $services = Cosmetologist::getServices($c['id']);
             foreach ($services as $s) {
                 $lines[] = $c['first_name'] . ': ' . $s['service'] . ' — ' . $s['price'] . ' BYN';
             }
         }
-        if (empty($lines)) return $this->textResponse('Услуг пока нет.', true);
-        return $this->textResponse(implode('. ', $lines) . '.', true);
-    }
-
-    private function findCosmetologistByName(string $name): ?array
-    {
-        $cosmetologists = Cosmetologist::findAll();
-        $name = mb_strtolower(trim($name));
-        foreach ($cosmetologists as $c) {
-            $full = mb_strtolower($c['first_name'] . ' ' . $c['last_name']);
-            if (mb_strpos($full, $name) !== false || mb_strpos($name, mb_strtolower($c['first_name'])) !== false) {
-                return $c;
-            }
-        }
-        return null;
-    }
-
-    private function findServiceByName(string $name, array $services): ?array
-    {
-        $name = mb_strtolower(trim($name));
-        foreach ($services as $s) {
-            if (mb_strpos(mb_strtolower($s['service']), $name) !== false) return $s;
-        }
-        return null;
-    }
-
-    private function matchCommand(string $command, array $keywords): bool
-    {
-        foreach ($keywords as $kw) {
-            if (mb_strpos($command, $kw) !== false) return true;
-        }
-        return false;
-    }
-
-    private function textResponse(string $text, bool $endSession): array
-    {
-        return [
-            'response' => ['text' => $text, 'tts' => $text, 'end_session' => $endSession],
-            'session' => [],
-            'version' => '1.0'
-        ];
+        if (empty($lines)) return AliceController::reply('Услуг пока нет.', $session, true);
+        return AliceController::reply(implode('. ', $lines) . '.', $session, true);
     }
 }

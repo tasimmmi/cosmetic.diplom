@@ -61,7 +61,7 @@ class TokenService
     }
 
     /**
-     *  Сгенерировать пару токенов
+     * Сгенерировать пару токенов
      */
     public function generateTokenPair($user, $metadata = [])
     {
@@ -74,44 +74,29 @@ class TokenService
 
     public function verifyAccessToken($token)
     {
-        try {
-            $decoded = JWT::decode($token, new Key($this->secretKey, 'HS256'));
-            
-            if (!isset($decoded->type) || $decoded->type !== 'access') {
-                throw new \Exception('Invalid token type');
-            }
-            
-            return (array) $decoded;
-        } catch (\Exception $e) {
-            LoggerService::warning('Token verification failed: ' . $e->getMessage());
-            throw $e;
+        $decoded = JWT::decode($token, new Key($this->secretKey, 'HS256'));
+        
+        if (!isset($decoded->type) || $decoded->type !== 'access') {
+            throw new \Exception('Invalid token type');
         }
+        
+        return (array) $decoded;
     }
 
     /**
-     *  Обновить access токен с сохранением role_id
+     * Обновить access токен с сохранением role_id
      */
     public function refreshAccessToken($refreshToken)
     {
         $tokenRecord = RefreshToken::findByToken($refreshToken);
         
-        if (!$tokenRecord) {
-            throw new \Exception('Invalid refresh token');
-        }
-        
-        if ($tokenRecord['revoked']) {
-            throw new \Exception('Refresh token has been revoked');
-        }
-        
-        if (strtotime($tokenRecord['expires_at']) < time()) {
-            throw new \Exception('Refresh token expired');
-        }
+        if (!$tokenRecord) throw new \Exception('Invalid refresh token');
+        if ($tokenRecord['revoked']) throw new \Exception('Refresh token has been revoked');
+        if (strtotime($tokenRecord['expires_at']) < time()) throw new \Exception('Refresh token expired');
         
         $user = User::findById($tokenRecord['user_id']);
+        if (!$user) throw new \Exception('User not found');
         
-        if (!$user) {
-            throw new \Exception('User not found');
-        }
         if ($user['role'] === 'cosmetologist') {
             $cosm = Cosmetologist::findByUserId($user['id']);
             $user['cosmetologist_id'] = $cosm['id'] ?? null;
@@ -122,44 +107,24 @@ class TokenService
         
         $accessToken = $this->generateAccessToken($user);
         
-        // Ротация refresh token
         if (($_ENV['ROTATE_REFRESH_TOKENS'] ?? 'false') === 'true') {
             RefreshToken::revoke($refreshToken);
-            $newRefreshToken = $this->generateRefreshToken($user, [
-                'ip' => $tokenRecord['ip_address'],
-                'userAgent' => $tokenRecord['user_agent']
-            ]);
-            
             return [
                 'access_token' => $accessToken,
-                'refresh_token' => $newRefreshToken,
+                'refresh_token' => $this->generateRefreshToken($user, ['ip' => $tokenRecord['ip_address'], 'userAgent' => $tokenRecord['user_agent']]),
                 'expires_in' => $this->accessExpires
             ];
         }
         
-        return [
-            'access_token' => $accessToken,
-            'expires_in' => $this->accessExpires
-        ];
+        return ['access_token' => $accessToken, 'expires_in' => $this->accessExpires];
     }
 
-    public function revokeRefreshToken($token)
-    {
-        return RefreshToken::revoke($token);
-    }
-
-    public function revokeAllUserTokens($userId)
-    {
-        return RefreshToken::revokeAllForUser($userId);
-    }
-
-    public function generateVerificationToken()
-    {
-        return bin2hex(random_bytes(32));
-    }
+    public function revokeRefreshToken($token) { return RefreshToken::revoke($token); }
+    public function revokeAllUserTokens($userId) { return RefreshToken::revokeAllForUser($userId); }
+    public function generateVerificationToken() { return bin2hex(random_bytes(32)); }
 
     /**
-     *  Получить cosmetologist_id по user_id
+     * Получить cosmetologist_id по user_id
      */
     private function getCosmetologistId($userId): ?int
     {
@@ -168,7 +133,7 @@ class TokenService
     }
 
     /**
-     *  Получить client_id по user_id
+     * Получить client_id по user_id
      */
     private function getClientId($userId): ?int
     {
@@ -178,17 +143,10 @@ class TokenService
 
     private function parseExpiration($expiresIn)
     {
-        $units = [
-            's' => 1,
-            'm' => 60,
-            'h' => 3600,
-            'd' => 86400
-        ];
-        
+        $units = ['s' => 1, 'm' => 60, 'h' => 3600, 'd' => 86400];
         if (preg_match('/^(\d+)([smhd])$/', $expiresIn, $matches)) {
             return (int) $matches[1] * $units[$matches[2]];
         }
-        
         return 900;
     }
 }

@@ -83,12 +83,6 @@ include __DIR__ . '/partials/header-simple.php';
             <span style="font-weight: bold; margin-right: 8px;">Я</span>
             <span>Войти через Яндекс</span>
         </button>
-        
-        <div class="auth-footer">
-            <p class="text-muted">
-                Вы косметолог? <a href="register.php?role=cosmetologist">Зарегистрируйтесь здесь</a>
-            </p>
-        </div>
     </div>
 </div>
 
@@ -146,8 +140,8 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
             let redirectUrl = redirect;
             if (!redirectUrl) {
                 redirectUrl = data.data.user.role === 'cosmetologist' 
-                    ? '/cosmetologist/dashboard.php' 
-                    : 'client/dashboard.php';
+                    ? '/frontend/cosmetologist/dashboard.php' 
+                    : '/frontend/client/dashboard.php';
             }
             
             window.location.href = redirectUrl;

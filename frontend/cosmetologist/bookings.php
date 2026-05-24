@@ -19,6 +19,7 @@ $extraStyles = '
     .calendar-mini-day { 
         text-align: center; padding: 6px 2px; border-radius: 6px; cursor: pointer; font-size: 12px;
         position: relative; transition: all 0.15s; color: #555; font-weight: 500;
+        min-height: 45px;
     }
     .calendar-mini-day:hover { background: #f0f4ff; }
     .calendar-mini-day.other-month { color: #ddd; cursor: default; }
@@ -27,8 +28,8 @@ $extraStyles = '
     .calendar-mini-day.selected { background: #667eea; color: white; font-weight: 700; box-shadow: 0 2px 8px rgba(102,126,234,0.3); }
     .calendar-mini-day.has-bookings { font-weight: 600; }
     
-    .calendar-dots { display: flex; justify-content: center; gap: 2px; margin-top: 2px; }
-    .calendar-dot { width: 5px; height: 5px; border-radius: 50%; }
+    .calendar-dots { display: flex; justify-content: center; gap: 3px; margin-top: 4px; min-height: 8px; }
+    .calendar-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
     .calendar-dot.my { background: #f0ad4e; }
     .calendar-dot.other { background: #d9534f; }
     
@@ -157,7 +158,6 @@ include __DIR__ . '/../partials/header.php';
     </div>
 </div>
 
-<!-- МОДАЛЬНОЕ ОКНО -->
 <div class="modal-overlay" id="add-booking-modal">
     <div class="modal-box">
         <h3>Новая запись</h3>
@@ -203,7 +203,6 @@ var cosmetologistId = null;
 var monthData = {};
 var page = 1;
 var hasMore = false;
-var availableSlots = [];
 var clients = [];
 var services = [];
 
@@ -215,6 +214,27 @@ var services = [];
 
 function changeMonth(d) { curDate.setMonth(curDate.getMonth() + d); renderCal(); loadMonthData(); }
 function goToToday() { curDate = new Date(); selDate = new Date().toISOString().split('T')[0]; renderCal(); loadMonthData(); page = 1; loadBookings(); }
+
+async function loadMonthData() {
+    var y = curDate.getFullYear(), m = String(curDate.getMonth() + 1).padStart(2, '0');
+    var startDate = y + '-' + m + '-01', endDate = y + '-' + m + '-31';
+    try {
+        var r = await AUTH.fetch('/backend/public/api/cosmetologist/schedule/calendar-data?start_date=' + startDate + '&end_date=' + endDate);
+        var d = await r.json();
+        if (d.success && d.data.bookings) {
+            monthData = {};
+            Object.keys(d.data.bookings).forEach(function(date) {
+                var active = (d.data.bookings[date] || []).filter(function(b) { return b.status === 'pending' || b.status === 'confirmed'; });
+                if (active.length > 0) {
+                    monthData[date] = active.map(function(b) {
+                        return { schedule: date + ' ' + (b.time || '00:00:00'), cosmetologist_user_id: b.cosmetologist_user_id, service_name: b.service_name, status: b.status };
+                    });
+                }
+            });
+            renderCal();
+        }
+    } catch(e) {}
+}
 
 function renderCal() {
     var y = curDate.getFullYear(), m = curDate.getMonth();
@@ -238,38 +258,28 @@ function renderCal() {
             html += '<div class="day-tooltip">';
             dayBookings.forEach(function(b) {
                 var time = b.schedule.split(' ')[1]?.substring(0, 5) || '';
-                html += '<div style="color:' + (b.cosmetologist_user_id == curUserId ? '#f0ad4e' : '#d9534f') + '; font-size:10px;">' + (b.cosmetologist_user_id == curUserId ? 'Моя' : 'Чужая') + ': ' + time + ' ' + esc(b.service_name) + '</div>';
+                var isMy = b.cosmetologist_user_id == curUserId;
+                html += '<div style="color:' + (isMy ? '#f0ad4e' : '#d9534f') + '; font-size:10px; white-space:nowrap;">' + (isMy ? 'Моя' : 'Коллега') + ': ' + time + ' ' + esc(b.service_name) + '</div>';
             });
             html += '</div>';
         }
-        html += day;
+        html += '<div style="font-weight:600;">' + day + '</div>';
         if (dayBookings.length > 0) {
+            var hasMy = dayBookings.some(function(b) { return b.cosmetologist_user_id == curUserId; });
+            var hasOther = dayBookings.some(function(b) { return b.cosmetologist_user_id != curUserId; });
             html += '<div class="calendar-dots">';
-            if (dayBookings.some(function(b) { return b.cosmetologist_user_id == curUserId; })) html += '<span class="calendar-dot my"></span>';
-            if (dayBookings.some(function(b) { return b.cosmetologist_user_id != curUserId; })) html += '<span class="calendar-dot other"></span>';
+            if (hasMy) html += '<span class="calendar-dot my" title="Мои записи"></span>';
+            if (hasOther) html += '<span class="calendar-dot other" title="Записи коллег"></span>';
             html += '</div>';
-        }
+        } else { html += '<div class="calendar-dots" style="visibility:hidden;"></div>'; }
         html += '</div>';
     }
     var total = fd + dim, remaining = total % 7 === 0 ? 0 : 7 - (total % 7);
-    for (var i = 1; i <= remaining; i++) { html += '<div class="calendar-mini-day other-month">' + i + '</div>'; }
+    for (var i = 1; i <= remaining; i++) { html += '<div class="calendar-mini-day other-month">' + i + '<div class="calendar-dots" style="visibility:hidden;"></div></div>'; }
     document.getElementById('cal-grid').innerHTML = html;
 }
 
 function pickDate(ds) { selDate = (selDate === ds) ? null : ds; renderCal(); page = 1; loadBookings(); }
-
-async function loadMonthData() {
-    var y = curDate.getFullYear(), m = String(curDate.getMonth() + 1).padStart(2, '0');
-    try {
-        var r = await AUTH.fetch('/backend/public/api/cosmetologist/bookings?month=' + y + '-' + m);
-        var d = await r.json();
-        if (d.success && d.data.month_bookings) {
-            monthData = {};
-            d.data.month_bookings.forEach(function(b) { var dk = b.schedule.split(' ')[0]; if (!monthData[dk]) monthData[dk] = []; monthData[dk].push(b); });
-            renderCal();
-        }
-    } catch(e) {}
-}
 
 async function loadBookings(append) {
     var c = document.getElementById('bookings-list');
@@ -279,7 +289,7 @@ async function loadBookings(append) {
         var url = '/backend/public/api/cosmetologist/bookings?page=' + page + '&limit=20';
         if (selDate) url += '&date=' + selDate;
         if (status !== 'all') url += '&status=' + status;
-        var r = await AUTH.fetch(url); var d = await r.json();
+        var r = await AUTH.fetch(url), d = await r.json();
         if (d.success) {
             var bookings = d.data.bookings || [];
             hasMore = d.data.has_more || false;
@@ -343,9 +353,9 @@ function openAddBookingModal() {
     document.getElementById('new-client-phone').value = '';
     document.getElementById('new-client-fields').style.display = 'none';
     document.getElementById('booking-service').value = '';
-    var today = new Date().toISOString().split('T')[0];
-    document.getElementById('booking-date').value = today;
-    document.getElementById('booking-date').min = today;
+    var date = selDate || new Date().toISOString().split('T')[0];
+    document.getElementById('booking-date').value = date;
+    document.getElementById('booking-date').min = new Date().toISOString().split('T')[0];
     document.getElementById('booking-desc').value = '';
     document.getElementById('time-section').style.display = 'none';
     document.getElementById('time-slots').innerHTML = '';
@@ -392,12 +402,20 @@ async function createBooking() {
     var time = null;
     var sel = document.querySelector('#time-slots .time-slot.selected');
     var cust = document.getElementById('booking-custom-time');
-    if (sel && !sel.classList.contains('other-time')) time = sel.textContent.trim();
-    else if (cust.value) time = cust.value;
+    var isCustomTime = false;
+    
+    if (sel && !sel.classList.contains('other-time') && !sel.classList.contains('no-slots')) {
+        time = sel.textContent.trim();
+    } else if (cust.value) {
+        time = cust.value;
+        isCustomTime = true;
+    }
+    
     if (!serviceId) { alert('Выберите услугу'); return; }
     if (!date) { alert('Выберите дату'); return; }
     if (!time) { alert('Выберите время'); return; }
     if (!clientId && (!newName || !newPhone)) { alert('Выберите клиента или заполните имя и телефон'); return; }
+    
     if (clientId === 'new' && newName && newPhone) {
         try {
             var cr = await AUTH.fetch('/backend/public/api/cosmetologist/clients', { method:'POST', body:JSON.stringify({fullname:newName,phone:newPhone,communication:'phone'}) });
@@ -406,13 +424,53 @@ async function createBooking() {
             else { alert('Ошибка создания клиента: ' + (cd.error||'')); return; }
         } catch(e) { alert('Ошибка соединения'); return; }
     }
+    
     if (!clientId || clientId === 'new') { alert('Не удалось определить клиента'); return; }
+    
+    var schedule = date + ' ' + time + ':00';
+    
+    if (isCustomTime) {
+        var service = services.find(function(s) { return s.id == serviceId; });
+        if (!service) { alert('Услуга не найдена'); return; }
+        
+        var endTime = addMinutesToTime(time, service.duration);
+        
+        try {
+            var r = await AUTH.fetch('/backend/public/api/cosmetologist/schedule/check-and-generate', {
+                method: 'POST',
+                body: JSON.stringify({ date: date, start_time: time, end_time: endTime, service_id: serviceId })
+            });
+            var d = await r.json();
+            
+            if (!r.ok || !d.success) {
+                alert(d.error || 'Время занято или не удалось создать слоты');
+                return;
+            }
+        } catch(e) {
+            alert('Ошибка проверки времени');
+            return;
+        }
+    }
+    
     try {
-        var r = await AUTH.fetch('/backend/public/api/bookings', { method:'POST', body:JSON.stringify({client_id:parseInt(clientId),service_id:parseInt(serviceId),schedule:date+' '+time+':00',description:desc}) });
+        var r = await AUTH.fetch('/backend/public/api/bookings', { 
+            method:'POST', 
+            body:JSON.stringify({ cosmetologist_id: cosmetologistId, client_id:parseInt(clientId), service_id:parseInt(serviceId), schedule: schedule, description: desc })
+        });
         var d = await r.json();
         if (r.ok && d.success) { closeAddBookingModal(); loadBookings(); loadMonthData(); loadClientsAndServices(); }
         else alert(d.error || 'Ошибка создания записи');
     } catch(e) { alert('Ошибка соединения'); }
+}
+
+function addMinutesToTime(time, duration) {
+    if (!duration) return time;
+    var parts = duration.split(':');
+    var mins = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+    var t = time.split(':');
+    var totalMins = parseInt(t[0]) * 60 + parseInt(t[1]) + mins;
+    var h = Math.floor(totalMins / 60), m = totalMins % 60;
+    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
 }
 
 document.getElementById('add-booking-modal').addEventListener('click', function(e) { if (e.target === this) closeAddBookingModal(); });

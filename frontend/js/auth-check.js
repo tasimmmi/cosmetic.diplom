@@ -7,9 +7,7 @@ var AUTH = {
     token: localStorage.getItem('access_token'),
     user: JSON.parse(localStorage.getItem('user') || '{}'),
     
-    // Проверить и обновить токен при необходимости
     refreshIfNeeded: async function() {
-        // Если токена нет - редирект
         if (!this.token) {
             console.log('[AUTH] No token, redirecting to login');
             window.location.href = '/frontend/login.php?redirect=' + encodeURIComponent(window.location.pathname);
@@ -17,7 +15,6 @@ var AUTH = {
         }
         
         try {
-            // Расшифровываем токен
             var payload = JSON.parse(atob(this.token.split('.')[1]));
             var expiresAt = payload.exp * 1000;
             var now = Date.now();
@@ -25,7 +22,6 @@ var AUTH = {
             
             console.log('[AUTH] Token expires in:', Math.round(timeLeft / 1000), 'seconds');
             
-            // Если истекает через 2 минуты - обновляем
             if (timeLeft < 120000) {
                 console.log('[AUTH] Token expiring soon, refreshing...');
                 
@@ -56,7 +52,6 @@ var AUTH = {
                     }
                 }
                 
-                // Если не удалось обновить - редирект на вход
                 console.log('[AUTH] Token refresh failed');
                 this.clear();
                 window.location.href = '/frontend/login.php';
@@ -73,7 +68,6 @@ var AUTH = {
         }
     },
     
-    // Очистить данные
     clear: function() {
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
@@ -82,7 +76,6 @@ var AUTH = {
         this.user = {};
     },
     
-    // Получить заголовки для запросов
     getHeaders: function() {
         return {
             'Authorization': 'Bearer ' + this.token,
@@ -91,23 +84,28 @@ var AUTH = {
         };
     },
     
-    // Выполнить запрос к API с автообновлением токена
     fetch: async function(url, options) {
-        // Проверяем токен перед запросом
-        await this.refreshIfNeeded();
-        
         options = options || {};
-        options.headers = this.getHeaders();
+        options.headers = options.headers || {};
+        
+        // Добавляем Authorization
+        if (this.token) {
+            options.headers['Authorization'] = 'Bearer ' + this.token;
+        }
+        if (!options.headers['Content-Type']) {
+            options.headers['Content-Type'] = 'application/json';
+        }
+        options.headers['Accept'] = 'application/json';
+        
+        console.log('[AUTH] Fetching:', url, 'with token:', this.token ? this.token.substring(0, 20) + '...' : 'NONE');
         
         var response = await fetch(url, options);
         
-        // Если 401 - пробуем обновить токен и повторить
         if (response.status === 401) {
             console.log('[AUTH] Got 401, trying to refresh token...');
-            
             var refreshed = await this.refreshIfNeeded();
             if (refreshed) {
-                options.headers = this.getHeaders();
+                options.headers['Authorization'] = 'Bearer ' + this.token;
                 response = await fetch(url, options);
             }
         }
@@ -116,13 +114,11 @@ var AUTH = {
     }
 };
 
-// Автоматически проверяем при загрузке страницы
-(async function() {
+(function() {
     var isAuthPage = window.location.pathname.includes('/login.php') || 
                      window.location.pathname.includes('/register.php');
     
     if (!isAuthPage) {
-        var ok = await AUTH.refreshIfNeeded();
-        if (!ok) return; // Уже редиректнули
+        AUTH.refreshIfNeeded();
     }
 })();

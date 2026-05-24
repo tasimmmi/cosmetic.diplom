@@ -312,9 +312,19 @@ function renderClients(list) {
     
     var html = '';
     list.forEach(function(cl) {
+        var isRegistered = cl.user_id && cl.user_id > 0;
+        var icon = isRegistered 
+            ? '<span title="Зарегистрирован самостоятельно" class="reg-icon">' +
+                '<svg width="16" height="16" viewBox="0 0 16 16" style="vertical-align:middle; margin-left:2px;">' +
+                    '<circle cx="8" cy="5" r="3" fill="#667eea"/>' +
+                    '<ellipse cx="8" cy="13" rx="5" ry="3" fill="#667eea"/>' +
+                '</svg>' +
+              '</span>' 
+            : '';
+        
         html += '<div class="client-card" onclick="openDetail(' + cl.id + ')">' +
             '<div class="client-header">' +
-                '<span class="client-name">' + esc(cl.fullname) + '</span>' +
+                '<span class="client-name">' + esc(cl.fullname) + icon + '</span>' +
                 '<span class="' + (cl.is_active == 1 ? 'badge-active' : 'badge-inactive') + '">' + 
                     (cl.is_active == 1 ? 'Активный' : 'Неактивный') + 
                 '</span>' +
@@ -361,7 +371,26 @@ async function openDetail(id) {
         
         if (data.success) {
             currentClientData = data.data.client;
-            document.getElementById('modal-client-name').textContent = data.data.client.fullname;
+            
+            var isRegistered = currentClientData.user_id && currentClientData.user_id > 0;
+            var icon = isRegistered
+                ? '<span title="Зарегистрирован самостоятельно" style="display:inline-block; vertical-align:middle; margin-left:6px;">' +
+                    '<svg width="20" height="20" viewBox="0 0 16 16">' +
+                        '<circle cx="8" cy="5" r="3" fill="#667eea"/>' +
+                        '<ellipse cx="8" cy="13" rx="5" ry="3" fill="#667eea"/>' +
+                    '</svg>' +
+                  '</span>'
+                : '';
+            
+            // Имя слева, иконка справа
+            document.getElementById('modal-client-name').innerHTML = esc(currentClientData.fullname) + icon;
+            
+            // Скрываем кнопку "Изменить" для зарегистрированных клиентов
+            var editBtn = document.querySelector('#detail-modal .modal-box-header .btn-outline');
+            if (editBtn) {
+                editBtn.style.display = isRegistered ? 'none' : '';
+            }
+            
             renderHistory(data.data.history || []);
         } else {
             document.getElementById('modal-history').innerHTML = '<p class="text-danger">Ошибка загрузки истории</p>';

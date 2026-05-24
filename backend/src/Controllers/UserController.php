@@ -8,10 +8,12 @@ use App\Models\Client;
 use App\Models\Cosmetologist;
 use App\Models\Booking;
 use App\Services\LoggerService;
+use App\Services\EmailService;
 use App\Utils\Validator;
 
 class UserController
 {
+    
     public function me(Request $request, Response $response)
     {
         $userId = $request->getParam('user_id');
@@ -23,10 +25,13 @@ class UserController
         
         unset($user['password'], $user['salt'], $user['verification_token'], $user['verification_token_expires']);
         
-        if ($user['role'] === 'client' && $user['client_id']) {
-            $user['client_details'] = Client::getDetails($user['client_id']);
-        } elseif ($user['role'] === 'cosmetologist' && $user['cosmetologist_id']) {
-            $user['cosmetologist_details'] = Cosmetologist::findById($user['cosmetologist_id']);
+        if ($user['role'] === 'cosmetologist' && $user['cosmetologist_id']) {
+            $cosm = Cosmetologist::findById($user['cosmetologist_id']);
+            if ($cosm && !empty($cosm['avatar'])) {
+                $user['avatar'] = base64_encode($cosm['avatar']);
+            } else {
+                $user['avatar'] = null;
+            }
         }
         
         return $response->success(['user' => $user]);
@@ -42,14 +47,35 @@ class UserController
             return $response->error('Пользователь не найден', 404);
         }
         
-        $validator = new Validator($data);
-        $validator->required(['phone']);
-        
-        if (!$validator->isValid()) {
-            return $response->error($validator->getFirstError(), 400);
-        }
-        
         try {
+            if (isset($data['avatar'])) {
+                if (!$user['cosmetologist_id']) {
+                    return $response->error('Только косметолог может установить аватар', 400);
+                }
+                
+                if ($data['avatar'] === null) {
+                    Cosmetologist::updateAvatar($user['cosmetologist_id'], null);
+                } else {
+                    $avatarData = base64_decode($data['avatar']);
+                    if ($avatarData === false) {
+                        return $response->error('Неверный формат изображения', 400);
+                    }
+                    Cosmetologist::updateAvatar($user['cosmetologist_id'], $avatarData);
+                }
+                
+                $updatedUser = User::findById($userId);
+                unset($updatedUser['password'], $updatedUser['salt']);
+                return $response->success(['user' => $updatedUser], 'Аватар обновлён');
+            }
+            
+            // Обновление профиля
+            $validator = new Validator($data);
+            $validator->required(['phone']);
+            
+            if (!$validator->isValid()) {
+                return $response->error($validator->getFirstError(), 400);
+            }
+            
             if ($user['role'] === 'client') {
                 Client::updateByUserId($userId, [
                     'fullname' => $data['fullname'] ?? $user['client_name'],
@@ -61,10 +87,23 @@ class UserController
                     'first_name' => $data['first_name'] ?? $user['first_name'],
                     'last_name' => $data['last_name'] ?? $user['last_name'],
                     'phone' => $data['phone'],
-                    'address' => $data['address'] ?? $user['address'],
-                    'education' => $data['education'] ?? $user['education'],
-                    'about' => $data['about'] ?? $user['about']
+                    'address' => $data['address'] ?? $user['address']
                 ]);
+            }
+            
+            // Смена email
+            if (!empty($data['email']) && $data['email'] !== $user['email']) {
+                $existingUser = User::findByEmail($data['email']);
+                if ($existingUser) {
+                    return $response->error('Этот email уже используется', 409);
+                }
+                
+                $verificationToken = bin2hex(random_bytes(32));
+                User::updateEmail($userId, $data['email'], $verificationToken);
+                
+                $name = $user['client_name'] ?? $user['first_name'] ?? 'Пользователь';
+                $emailService = new EmailService();
+                $emailService->sendVerificationEmail($data['email'], $verificationToken, $name);
             }
             
             LoggerService::info('Profile updated', ['user_id' => $userId]);
@@ -75,7 +114,7 @@ class UserController
             return $response->success(['user' => $updatedUser], 'Профиль обновлен');
             
         } catch (\Exception $e) {
-            LoggerService::error('Profile update failed', ['error' => $e->getMessage()]);
+            LoggerService::error('Profile update failed: ' . $e->getMessage());
             return $response->error('Ошибка обновления профиля', 500);
         }
     }
@@ -102,53 +141,28 @@ class UserController
         return $response->success(['bookings' => $bookings]);
     }
 
-    public function getClients(Request $request, Response $response)
-    {
-        $userId = $request->getParam('user_id');
-        $user = User::findById($userId);
-        
-        if (!$user || $user['role'] !== 'cosmetologist') {
-            return $response->error('Доступ запрещен', 403);
-        }
-        
-        $search = $request->getQueryParam('search', '');
-        $sort = $request->getQueryParam('sort', 'recent');
-        
-        $clients = Client::getByCosmetologist($user['cosmetologist_id'], $search, $sort);
-        
-        return $response->success(['clients' => $clients]);
-    }
-
-    public function getClientDetails(Request $request, Response $response, int $clientId)
-    {
-        $userId = $request->getParam('user_id');
-        $user = User::findById($userId);
-        
-        if (!$user || $user['role'] !== 'cosmetologist') {
-            return $response->error('Доступ запрещен', 403);
-        }
-        
-        $client = Client::getDetails($clientId, $user['cosmetologist_id']);
-        
-        if (!$client) {
-            return $response->error('Клиент не найден', 404);
-        }
-        
-        $history = Client::getHistory($clientId, $user['cosmetologist_id']);
-        $statistics = Client::getBookingStatistics($clientId);
-        
-        return $response->success([
-            'client' => $client,
-            'history' => $history,
-            'statistics' => $statistics
-        ]);
-    }
-
     public function changePassword(Request $request, Response $response)
     {
         $userId = $request->getParam('user_id');
         $data = $request->getBody();
         
+        // Установка начального пароля (при отвязке Яндекс)
+        if (!empty($data['set_initial'])) {
+            if (empty($data['new_password'])) {
+                return $response->error('Введите пароль', 400);
+            }
+            if ($data['new_password'] !== ($data['confirm_password'] ?? '')) {
+                return $response->error('Пароли не совпадают', 400);
+            }
+            if (strlen($data['new_password']) < 8) {
+                return $response->error('Минимум 8 символов', 400);
+            }
+            
+            User::updatePassword($userId, $data['new_password']);
+            return $response->success(null, 'Пароль установлен');
+        }
+        
+        // Обычная смена пароля
         $validator = new Validator($data);
         $validator->required(['current_password', 'new_password'])->minLength('new_password', 8);
         

@@ -5,9 +5,6 @@ use App\Config\Database;
 
 class Cosmetologist
 {
-    /**
-     * Получить косметолога по ID
-     */
     public static function findById(int $id): ?array
     {
         $sql = "SELECT c.*, u.email, u.role, u.email_verified, u.last_login
@@ -17,9 +14,6 @@ class Cosmetologist
         return Database::fetch($sql, [$id], 'i');
     }
 
-    /**
-     * Получить косметолога по user_id
-     */
     public static function findByUserId(int $userId): ?array
     {
         $sql = "SELECT c.*, u.email, u.role
@@ -29,48 +23,32 @@ class Cosmetologist
         return Database::fetch($sql, [$userId], 'i');
     }
 
-    /**
-     * Создать косметолога
-     */
     public static function create(array $data): int
     {
-        $sql = "INSERT INTO Cosmetologist (user_id, first_name, last_name, phone, address, education, about) 
-                VALUES (?, ?, ?, ?, ?, ?, ?)";
+        $sql = "INSERT INTO Cosmetologist (user_id, first_name, last_name, phone, address) 
+                VALUES (?, ?, ?, ?, ?)";
         
         Database::execute($sql, [
             $data['user_id'],
             $data['first_name'],
             $data['last_name'],
             $data['phone'] ?? null,
-            $data['address'] ?? null,
-            $data['education'] ?? null,
-            $data['about'] ?? null
-        ], 'issssss');
+            $data['address'] ?? null
+        ], 'issss');
         
         return Database::lastInsertId();
     }
 
-    /**
-     * Получить всех косметологов
-     */
-    public static function findAll(?int $limit = null, int $offset = 0): array
+    public static function findAll(): array
     {
         $sql = "SELECT c.*, u.email
                 FROM Cosmetologist c 
                 JOIN Users u ON c.user_id = u.id
-                ORDER BY c.rating DESC, c.first_name ASC";
-        
-        if ($limit) {
-            $sql .= " LIMIT ? OFFSET ?";
-            return Database::fetchAll($sql, [$limit, $offset], 'ii');
-        }
+                ORDER BY c.first_name ASC";
         
         return Database::fetchAll($sql);
     }
 
-    /**
-     * Поиск косметологов
-     */
     public static function search(string $query, int $limit = 20): array
     {
         $searchTerm = "%{$query}%";
@@ -80,40 +58,18 @@ class Cosmetologist
                 WHERE c.first_name LIKE ? 
                    OR c.last_name LIKE ? 
                    OR c.address LIKE ?
-                   OR EXISTS (
-                       SELECT 1 FROM Services s 
-                       WHERE s.cosmetologist_id = c.id AND s.service LIKE ?
-                   )
-                ORDER BY c.rating DESC
                 LIMIT ?";
         
-        return Database::fetchAll($sql, [$searchTerm, $searchTerm, $searchTerm, $searchTerm, $limit], 'ssssi');
+        return Database::fetchAll($sql, [$searchTerm, $searchTerm, $searchTerm, $limit], 'sssi');
     }
 
-    /**
-     * Получить косметолога по slug
-     */
-    public static function findBySlug(string $slug): ?array
-    {
-        $sql = "SELECT c.*, u.email
-                FROM Cosmetologist c 
-                JOIN Users u ON c.user_id = u.id 
-                WHERE CONCAT(LOWER(c.first_name), '-', LOWER(c.last_name)) = ?";
-        return Database::fetch($sql, [$slug], 's');
-    }
-
-    /**
-     * Обновить профиль косметолога по ID
-     */
     public static function update(int $id, array $data): int
     {
         $sql = "UPDATE Cosmetologist SET 
                 first_name = ?, 
                 last_name = ?, 
                 phone = ?, 
-                address = ?,
-                education = ?,
-                about = ?
+                address = ?
                 WHERE id = ?";
         
         return Database::execute($sql, [
@@ -121,24 +77,17 @@ class Cosmetologist
             $data['last_name'],
             $data['phone'],
             $data['address'] ?? null,
-            $data['education'] ?? null,
-            $data['about'] ?? null,
             $id
-        ], 'ssssssi');
+        ], 'ssssi');
     }
 
-    /**
-     * Обновить профиль косметолога по user_id
-     */
     public static function updateByUserId(int $userId, array $data): int
     {
         $sql = "UPDATE Cosmetologist SET 
                 first_name = ?, 
                 last_name = ?, 
                 phone = ?, 
-                address = ?,
-                education = ?,
-                about = ?
+                address = ?
                 WHERE user_id = ?";
         
         return Database::execute($sql, [
@@ -146,29 +95,19 @@ class Cosmetologist
             $data['last_name'],
             $data['phone'],
             $data['address'] ?? null,
-            $data['education'] ?? null,
-            $data['about'] ?? null,
             $userId
-        ], 'ssssssi');
+        ], 'ssssi');
     }
 
-    /**
-     * Получить услуги косметолога
-     */
     public static function getServices(int $cosmetologistId): array
     {
         $sql = "SELECT * FROM Services WHERE cosmetologist_id = ? ORDER BY service";
         return Database::fetchAll($sql, [$cosmetologistId], 'i');
     }
 
-    /**
-     * Получить доступные слоты
-     */
     public static function getAvailableSlots(int $cosmetologistId, ?string $date = null): array
     {
-        $sql = "SELECT * FROM v_available_time 
-                WHERE cosmetologist_id = ?";
-        
+        $sql = "SELECT * FROM Schedule WHERE cosmetologist_id = ? AND is_booked = 0";
         $params = [$cosmetologistId];
         $types = 'i';
         
@@ -183,21 +122,21 @@ class Cosmetologist
         return Database::fetchAll($sql, $params, $types);
     }
 
-    /**
-     * Получить имя косметолога для шапки
-     */
     public static function getHeaderName(int $cosmetologistId): ?array
     {
         $sql = "SELECT first_name, last_name FROM Cosmetologist WHERE id = ?";
         return Database::fetch($sql, [$cosmetologistId], 'i');
     }
 
-    /**
-     * Удалить косметолога
-     */
     public static function delete(int $id): int
     {
         $sql = "DELETE FROM Cosmetologist WHERE id = ?";
         return Database::execute($sql, [$id], 'i');
+    }
+
+    public static function updateAvatar(int $id, $avatarData): int
+    {
+        $sql = "UPDATE Cosmetologist SET avatar = ? WHERE id = ?";
+        return Database::execute($sql, [$avatarData, $id], 'bi');
     }
 }

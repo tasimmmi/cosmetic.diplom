@@ -131,13 +131,25 @@ a:hover { color: var(--primary-dark); }
     font-size: 28px;
     font-weight: 700;
     text-decoration: none;
+    display: inline-block;
 }
 
 .logo span {
-    background: var(--gradient-primary);
+    background: white;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    color: white;
+}
+
+/* Убираем подчёркивание при наведении */
+.logo:hover {
+    text-decoration: none !important;
+}
+
+/* Добавляем небольшую тень вниз */
+.logo:hover span {
+    text-shadow: 0 2px 4px rgba(204, 0, 255, 0.3);
 }
 
 .nav-menu {

@@ -5,14 +5,10 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Models\User;
 use App\Models\Booking;
-use App\Services\LoggerService;
 
 class ClientController
 {
-    /**
-     * GET /api/client/history
-     * История записей клиента
-     */
+    /** GET /api/client/history */
     public function history($request, $response)
     {
         $userId = (int)$request->getParam('user_id');
@@ -24,19 +20,14 @@ class ClientController
         
         $bookings = Booking::findByClientId((int)$user['client_id'], 'completed');
         
-        $totalSpent = array_sum(array_map(fn($b) => (float)($b['price'] ?? 0), $bookings));
-        
         return $response->success([
             'bookings' => $bookings,
-            'total_spent' => $totalSpent,
+            'total_spent' => array_sum(array_map(fn($b) => (float)($b['price'] ?? 0), $bookings)),
             'total_visits' => count($bookings)
         ]);
     }
 
-    /**
-     * GET /api/client/statistics
-     * Статистика клиента
-     */
+    /** GET /api/client/statistics */
     public function statistics($request, $response)
     {
         $userId = (int)$request->getParam('user_id');
@@ -46,16 +37,14 @@ class ClientController
             return $response->error('Клиент не найден', 404);
         }
         
-        $allBookings = Booking::findByClientId((int)$user['client_id']);
+        $bookings = Booking::findByClientId((int)$user['client_id']);
         
-        $stats = [
-            'total' => count($allBookings),
-            'pending' => count(array_filter($allBookings, fn($b) => $b['status'] === 'pending')),
-            'confirmed' => count(array_filter($allBookings, fn($b) => $b['status'] === 'confirmed')),
-            'completed' => count(array_filter($allBookings, fn($b) => $b['status'] === 'completed')),
-            'cancelled' => count(array_filter($allBookings, fn($b) => $b['status'] === 'cancelled')),
-        ];
-        
-        return $response->success($stats);
+        return $response->success([
+            'total' => count($bookings),
+            'pending' => count(array_filter($bookings, fn($b) => $b['status'] === 'pending')),
+            'confirmed' => count(array_filter($bookings, fn($b) => $b['status'] === 'confirmed')),
+            'completed' => count(array_filter($bookings, fn($b) => $b['status'] === 'completed')),
+            'cancelled' => count(array_filter($bookings, fn($b) => $b['status'] === 'cancelled')),
+        ]);
     }
 }

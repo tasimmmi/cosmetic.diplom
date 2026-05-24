@@ -5,228 +5,195 @@ use App\Models\Cosmetologist;
 use App\Models\Booking;
 use App\Models\Client;
 use App\Models\Material;
-use App\Models\Procurement;
 use App\Models\Schedule;
+use App\Services\AliceCommandParser;
 
 class AliceCosmetologistController
 {
     public function handle(array $data, array $user): array
     {
         $command = mb_strtolower(trim($data['request']['command'] ?? ''));
-        $cosmetologistId = $user['cosmetologist_id'] ?? null;
+        $session = $data['session'] ?? [];
+        $cosmId = $user['cosmetologist_id'] ?? null;
         
-        if (!$cosmetologistId) {
-            return $this->textResponse('Профиль косметолога не найден.', true);
-        }
-        
-        // Записи на сегодня
-        if ($this->matchCommand($command, ['записи на сегодня', 'сегодня', 'записи'])) {
-            return $this->handleTodayBookings($cosmetologistId);
-        }
-        
-        // Расписание
-        if ($this->matchCommand($command, ['расписание', 'график'])) {
-            return $this->handleSchedule($cosmetologistId);
-        }
-        
-        // Добавить запись
-        if ($this->matchCommand($command, ['добавить запись', 'новая запись', 'записать клиента'])) {
-            return $this->handleAddBooking($data, $cosmetologistId);
-        }
-        
-        // Добавить клиента
-        if ($this->matchCommand($command, ['добавить клиента', 'новый клиент'])) {
-            return $this->handleAddClient($data, $cosmetologistId);
-        }
-        
-        // Материалы
-        if ($this->matchCommand($command, ['материалы', 'склад'])) {
-            return $this->handleMaterials($cosmetologistId);
-        }
-        
-        // Добавить закупку
-        if ($this->matchCommand($command, ['добавить закупку', 'закупка', 'купить материал'])) {
-            return $this->handleAddProcurement($data, $cosmetologistId);
-        }
-        
-        // Списать материал
-        if ($this->matchCommand($command, ['списать', 'израсходовать', 'потратить'])) {
-            return $this->handleWriteOff($data, $cosmetologistId);
-        }
-        
-        // Отчёты
-        if ($this->matchCommand($command, ['отчёт', 'отчет', 'статистика'])) {
-            return $this->handleReports($cosmetologistId);
-        }
-        
-        return $this->textResponse('Неизвестная команда. Скажите «Помощь».', false);
-    }
+        if (!$cosmId) return AliceController::reply('Профиль косметолога не найден.', $session, true);
 
-    private function handleTodayBookings(int $cosmetologistId): array
-    {
-        $today = date('Y-m-d');
-        $bookings = Booking::findByCosmetologist($cosmetologistId, $today);
-        
-        if (empty($bookings)) {
-            return $this->textResponse('На сегодня записей нет.', true);
+        if (AliceController::match($command, ['есть ли', 'проверь', 'посмотри', 'что с', 'как там', 'как с'])) {
+            return $this->handleMaterials($data, $user);
         }
+        if (AliceController::match($command, ['записи', 'сегодня'])) {
+            return $this->handleBookings($data, $user);
+        }
+        if (AliceController::match($command, ['расписание', 'график', 'окошк', 'свободные'])) {
+            return $this->handleSchedule($data, $user);
+        }
+        if (AliceController::match($command, ['материалы', 'склад'])) {
+            return $this->handleMaterials($data, $user);
+        }
+        if (AliceController::match($command, ['услуги', 'прайс', 'цены'])) {
+            return $this->handleServices($data, $user);
+        }
+        if (AliceController::match($command, ['добавить клиента', 'новый клиент'])) {
+            return $this->handleAddClient($data, $user);
+        }
+        if (AliceController::match($command, ['списать', 'израсходовать'])) {
+            return $this->handleWriteOff($data, $user);
+        }
+        if (AliceController::match($command, ['отчёт', 'статистика'])) {
+            return $this->handleReports($data, $user);
+        }
+        
+        return AliceController::reply('Не поняла. Скажите «Помощь».', $session);
+    }
+    
+    public function handleBookings(array $data, array $user): array
+    {
+        $session = $data['session'] ?? [];
+        $cosmId = $user['cosmetologist_id'];
+        $date = $data['request']['nlu']['intents']['get_bookings']['slots']['date']['value'] ?? date('Y-m-d');
+        $date = $this->parseDate($date);
+        
+        $bookings = Booking::findByCosmetologist($cosmId, $date);
+        
+        if (empty($bookings)) return AliceController::reply('На ' . $date . ' записей нет.', $session, true);
         
         $lines = [];
         foreach ($bookings as $b) {
-            $time = date('H:i', strtotime($b['schedule']));
-            $status = ['pending' => '⏳', 'confirmed' => '✅', 'completed' => '✔️', 'cancelled' => '❌'][$b['status']] ?? '';
-            $lines[] = "{$time} — {$b['client_name']}: {$b['service_name']} {$status}";
+            $t = date('H:i', strtotime($b['schedule']));
+            $s = ['pending' => '⏳', 'confirmed' => '✅', 'completed' => '✔️', 'cancelled' => '❌'][$b['status']] ?? '';
+            $lines[] = "{$t} — {$b['client_name']}: {$b['service_name']} {$s}";
         }
         
-        return $this->textResponse('Записи на сегодня: ' . implode('. ', $lines) . '.', true);
+        return AliceController::reply('Записи на ' . $date . ': ' . implode('. ', $lines) . '.', $session, true);
     }
-
-    private function handleSchedule(int $cosmetologistId): array
+    
+    public function handleSchedule(array $data, array $user): array
     {
-        $today = date('Y-m-d');
-        $slots = Schedule::getByCosmetologist($cosmetologistId, $today);
-        $stats = Schedule::getDayStats($cosmetologistId, $today);
-        
-        if ($stats['total'] == 0) {
-            return $this->textResponse('На сегодня расписание не настроено.', true);
-        }
-        
-        return $this->textResponse(
-            "Расписание на сегодня: всего {$stats['total']} окон, "
-            . "свободно {$stats['free']}, занято {$stats['booked']}, отключено {$stats['deactivated']}.",
-            true
-        );
-    }
-
-    private function handleAddBooking(array $data, int $cosmetologistId): array
-    {
-        return $this->textResponse(
-            'Для создания записи используйте сайт или скажите «Добавить клиента» чтобы сначала создать клиента.',
-            true
-        );
-    }
-
-    private function handleAddClient(array $data, int $cosmetologistId): array
-    {
-        $command = mb_strtolower(trim($data['request']['command'] ?? ''));
         $session = $data['session'] ?? [];
-        $state = $session['state'] ?? [];
+        $cosmId = $user['cosmetologist_id'];
+        $date = $data['request']['nlu']['intents']['get_schedule']['slots']['date']['value'] ?? date('Y-m-d');
+        $date = $this->parseDate($date);
         
-        // Извлекаем имя и телефон из команды
-        // Пример: "Добавить клиента Иванова Анна телефон 375291234567"
-        preg_match('/телефон\s*(\+?\d+)/', $command, $phoneMatch);
-        $phone = $phoneMatch[1] ?? '';
+        $stats = Schedule::getDayStats($cosmId, $date);
         
-        // Убираем служебные слова
-        $nameStr = str_replace(['добавить клиента', 'новый клиент', 'телефон', $phone, '  '], '', $command);
-        $nameStr = trim($nameStr);
+        if ($stats['total'] == 0) return AliceController::reply('На ' . $date . ' расписание не настроено.', $session, true);
         
-        if (empty($nameStr) || empty($phone)) {
-            $session['state'] = ['step' => 'add_client'];
-            return [
-                'response' => [
-                    'text' => 'Назовите имя и телефон клиента. Например: «Иванова Анна телефон 375291234567»',
-                    'tts' => 'Назовите имя и телефон клиента',
-                    'end_session' => false
-                ],
-                'session' => $session,
-                'version' => '1.0'
-            ];
+        return AliceController::reply(
+            "На {$date}: всего {$stats['total']} окон, свободно {$stats['free']}, занято {$stats['booked']}, отключено {$stats['deactivated']}.",
+            $session, true
+        );
+    }
+    
+    public function handleMaterials(array $data, array $user): array
+    {
+        $session = $data['session'] ?? [];
+        $command = mb_strtolower(trim($data['request']['command'] ?? ''));
+        $cosmId = $user['cosmetologist_id'];
+        
+        $materials = Material::getAll($cosmId);
+        
+        if (empty($materials)) {
+            return AliceController::reply('У вас пока нет материалов.', $session, false);
+        }
+        
+        $foundMaterial = AliceCommandParser::extractMaterial($command, $materials);
+        
+        if ($foundMaterial) {
+            $status = $foundMaterial['is_stock'] ? 'в наличии' : 'закончился';
+            return AliceController::reply("«{$foundMaterial['material']}» {$status}.", $session, false);
+        }
+        
+        if (AliceCommandParser::hasSpecificMaterial($command)) {
+            return AliceController::reply('Я не нашла такой материал. Скажите «Материалы» для списка всех материалов.', $session, false);
+        }
+        
+        $lines = array_map(function($m) {
+            return $m['material'] . ' (' . ($m['is_stock'] ? 'в наличии' : 'закончился') . ')';
+        }, $materials);
+        
+        return AliceController::reply('Материалы: ' . implode('. ', $lines) . '.', $session, false);
+    }
+    
+    public function handleServices(array $data, array $user): array
+    {
+        $session = $data['session'] ?? [];
+        $cosmId = $user['cosmetologist_id'];
+        
+        $services = Cosmetologist::getServices($cosmId);
+        if (empty($services)) return AliceController::reply('У вас пока нет услуг.', $session, true);
+        
+        $lines = array_map(function($s) {
+            return $s['service'] . ' — ' . $s['price'] . ' BYN';
+        }, $services);
+        
+        return AliceController::reply('Услуги: ' . implode('. ', $lines) . '.', $session, true);
+    }
+    
+    public function handleAddClient(array $data, array $user): array
+    {
+        $session = $data['session'] ?? [];
+        $command = mb_strtolower(trim($data['request']['command'] ?? ''));
+        $cosmId = $user['cosmetologist_id'];
+        
+        $name = trim(str_replace(['добавить клиента', 'новый клиент', 'телефон', 'номер'], '', $command));
+        preg_match('/\+?\d{10,15}/', $command, $phoneMatch);
+        $phone = $phoneMatch[0] ?? '';
+        
+        if (empty($name) || empty($phone)) {
+            return AliceController::reply('Назовите имя и телефон. Например: «Добавить клиента Иванова Анна телефон 375291234567»', $session);
         }
         
         try {
-            $clientId = Client::create([
-                'creator_id' => $cosmetologistId,
-                'fullname' => $nameStr,
-                'phone' => $phone,
-                'communication' => 'phone'
-            ]);
-            
-            return $this->textResponse("Клиент {$nameStr} добавлен.", true);
+            Client::create(['creator_id' => $cosmId, 'fullname' => $name, 'phone' => $phone, 'communication' => 'phone']);
+            return AliceController::reply("Клиент {$name} добавлен.", $session, true);
         } catch (\Exception $e) {
-            return $this->textResponse('Ошибка добавления клиента.', true);
+            return AliceController::reply('Ошибка добавления клиента.', $session, true);
         }
     }
-
-    private function handleMaterials(int $cosmetologistId): array
+    
+    public function handleWriteOff(array $data, array $user): array
     {
-        $materials = Material::getAll($cosmetologistId);
-        
-        if (empty($materials)) {
-            return $this->textResponse('У вас пока нет материалов.', true);
-        }
-        
-        $lines = [];
-        foreach ($materials as $m) {
-            $status = $m['is_stock'] ? 'в наличии' : 'закончился';
-            $lines[] = "{$m['material']} ({$status})";
-        }
-        
-        return $this->textResponse('Материалы: ' . implode('. ', $lines) . '.', true);
-    }
-
-    private function handleAddProcurement(array $data, int $cosmetologistId): array
-    {
-        return $this->textResponse(
-            'Для добавления закупки используйте сайт в разделе «Склад».',
-            true
-        );
-    }
-
-    private function handleWriteOff(array $data, int $cosmetologistId): array
-    {
+        $session = $data['session'] ?? [];
         $command = mb_strtolower(trim($data['request']['command'] ?? ''));
+        $cosmId = $user['cosmetologist_id'];
         
-        $materials = Material::getAll($cosmetologistId);
-        $found = null;
-        
+        $materials = Material::getAll($cosmId);
         foreach ($materials as $m) {
             if (mb_strpos($command, mb_strtolower($m['material'])) !== false) {
-                $found = $m;
-                break;
+                Material::update($m['id'], $m['material'], false, $m['is_mutable']);
+                return AliceController::reply("Материал «{$m['material']}» списан.", $session, true);
             }
         }
         
-        if ($found) {
-            Material::update($found['id'], $found['material'], false, $found['is_mutable']);
-            return $this->textResponse("Материал «{$found['material']}» списан.", true);
-        }
-        
-        return $this->textResponse('Назовите материал для списания. Например: «Списать ватные диски».', false);
+        return AliceController::reply('Назовите материал. Например: «Списать ватные диски».', $session);
     }
-
-    private function handleReports(int $cosmetologistId): array
+    
+    public function handleReports(array $data, array $user): array
     {
-        $today = date('Y-m-d');
-        $bookings = Booking::findByCosmetologist($cosmetologistId, $today);
+        $session = $data['session'] ?? [];
+        $cosmId = $user['cosmetologist_id'];
         
-        $completed = array_filter($bookings, function($b) { return $b['status'] === 'completed'; });
+        $bookings = Booking::findByCosmetologist($cosmId, date('Y-m-d'));
+        $completed = array_filter($bookings, fn($b) => $b['status'] === 'completed');
         $revenue = array_sum(array_column($completed, 'price'));
         
-        $pending = count(array_filter($bookings, function($b) { return $b['status'] === 'pending'; }));
-        $confirmed = count(array_filter($bookings, function($b) { return $b['status'] === 'confirmed'; }));
+        $pending = count(array_filter($bookings, fn($b) => $b['status'] === 'pending'));
+        $confirmed = count(array_filter($bookings, fn($b) => $b['status'] === 'confirmed'));
         
-        return $this->textResponse(
-            "Сегодня: ожидают {$pending}, подтверждены {$confirmed}, "
-            . "завершены " . count($completed) . ", выручка {$revenue} BYN.",
-            true
+        return AliceController::reply(
+            "Сегодня: ожидают {$pending}, подтверждены {$confirmed}, завершены " . count($completed) . ", выручка {$revenue} BYN.",
+            $session, true
         );
     }
-
-    private function matchCommand(string $command, array $keywords): bool
+    
+    private function parseDate(string $date): string
     {
-        foreach ($keywords as $kw) {
-            if (mb_strpos($command, $kw) !== false) return true;
-        }
-        return false;
-    }
-
-    private function textResponse(string $text, bool $endSession): array
-    {
-        return [
-            'response' => ['text' => $text, 'tts' => $text, 'end_session' => $endSession],
-            'session' => [],
-            'version' => '1.0'
+        $map = [
+            'сегодня' => date('Y-m-d'),
+            'завтра' => date('Y-m-d', strtotime('+1 day')),
+            'послезавтра' => date('Y-m-d', strtotime('+2 days')),
         ];
+        
+        return $map[$date] ?? $date;
     }
 }

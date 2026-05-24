@@ -1,8 +1,3 @@
-/**
- * Общие функции для фронтенда
- */
-
-// Выход из системы
 function logout() {
     const refreshToken = localStorage.getItem('refresh_token');
     
@@ -21,12 +16,9 @@ function logout() {
     }
 }
 
-// Обновление шапки (информация о пользователе)
 function updateHeader() {
     const linksContainer = document.getElementById('header-links');
-    const actionsContainer = document.getElementById('header-actions');
-    
-    if (!linksContainer && !actionsContainer) return;
+    if (!linksContainer) return;
     
     const token = localStorage.getItem('access_token');
     const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -36,34 +28,18 @@ function updateHeader() {
             ? '/frontend/cosmetologist/dashboard.php' 
             : '/frontend/client/dashboard.php';
         
-        if (linksContainer) {
-            linksContainer.innerHTML = `
-                <a href="${dashboardUrl}"><i class="fas fa-user"></i> ${user.email}</a>
-                <a href="#" onclick="logout(); return false;"><i class="fas fa-sign-out-alt"></i> Выйти</a>
-            `;
-        }
-        
-        if (actionsContainer) {
-            actionsContainer.innerHTML = '';
-        }
+        linksContainer.innerHTML = `
+            <a href="${dashboardUrl}"><i class="fas fa-user"></i> ${user.email}</a>
+            <a href="#" onclick="logout(); return false;"><i class="fas fa-sign-out-alt"></i> Выйти</a>
+        `;
     } else {
-        if (linksContainer) {
-            linksContainer.innerHTML = `
-                <a href="/frontend/login.php"><i class="fas fa-sign-in-alt"></i> Войти</a>
-                <a href="/frontend/register.php"><i class="fas fa-user-plus"></i> Регистрация</a>
-            `;
-        }
-        
-        if (actionsContainer) {
-            actionsContainer.innerHTML = `
-                <a href="/frontend/login.php" class="btn btn-outline btn-sm">Войти</a>
-                <a href="/frontend/register.php" class="btn btn-primary btn-sm">Регистрация</a>
-            `;
-        }
+        linksContainer.innerHTML = `
+            <a href="/frontend/login.php"><i class="fas fa-sign-in-alt"></i> Войти</a>
+            <a href="/frontend/register.php"><i class="fas fa-user-plus"></i> Регистрация</a>
+        `;
     }
 }
 
-// Toast уведомления
 function showToast(message, type = 'info', duration = 4000) {
     let container = document.getElementById('toast-container');
     
@@ -86,29 +62,67 @@ function showToast(message, type = 'info', duration = 4000) {
     `;
     
     container.appendChild(toast);
-    
     setTimeout(() => toast.remove(), duration);
 }
 
-// Инициализация при загрузке страницы
-document.addEventListener('DOMContentLoaded', () => {
-    updateHeader();
-});
+document.addEventListener('DOMContentLoaded', () => updateHeader());
 
-// Форматирование даты
 function formatDateTime(datetime) {
     if (!datetime) return '—';
     const d = new Date(datetime);
-    return d.toLocaleString('ru-RU', { 
-        day: '2-digit', month: '2-digit', year: 'numeric',
-        hour: '2-digit', minute: '2-digit'
-    });
+    return d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-// Экранирование HTML
 function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
+
+// ========== БУРГЕР-МЕНЮ ДЛЯ МОБИЛЬНЫХ ==========
+(function() {
+    var burger = document.getElementById('burger-btn');
+    var panel = document.getElementById('mobile-panel');
+    var overlay = document.getElementById('mobile-overlay');
+    
+    if (!burger || !panel) return;
+    
+    function openPanel() {
+        burger.classList.add('active');
+        panel.classList.add('show');
+        if (overlay) overlay.classList.add('show');
+        document.body.style.overflow = 'hidden';
+    }
+    
+    function closePanel() {
+        burger.classList.remove('active');
+        panel.classList.remove('show');
+        if (overlay) overlay.classList.remove('show');
+        document.body.style.overflow = '';
+    }
+    
+    burger.addEventListener('click', function() {
+        panel.classList.contains('show') ? closePanel() : openPanel();
+    });
+    
+    if (overlay) {
+        overlay.addEventListener('click', closePanel);
+    }
+    
+    // Заполняем мобильное меню из сайдбара
+    var sidebar = document.querySelector('.dashboard-sidebar');
+    if (sidebar) {
+        var mobileNav = document.getElementById('mobile-nav');
+        if (mobileNav) {
+            mobileNav.innerHTML = sidebar.querySelector('.sidebar-menu').innerHTML;
+        }
+    }
+    
+    // Имя пользователя
+    var user = JSON.parse(localStorage.getItem('user') || '{}');
+    var mobileUser = document.getElementById('mobile-user');
+    if (mobileUser && user.email) {
+        mobileUser.innerHTML = '<strong>' + user.email + '</strong>' + (user.role === 'cosmetologist' ? 'Косметолог' : 'Клиент');
+    }
+})();
