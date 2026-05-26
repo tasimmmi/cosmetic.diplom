@@ -1,10 +1,48 @@
 <?php
 $pageTitle = 'Услуги';
 $extraStyles = '
-    .service-card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
-    .service-info h4 { margin-bottom: 5px; }
-    .service-price { font-size: 20px; font-weight: 700; color: #667eea; }
-    .service-actions { display: flex; gap: 10px; }
+    .service-card { 
+        background: white; 
+        border-radius: 12px; 
+        padding: 20px; 
+        margin-bottom: 15px; 
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1); 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; 
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+    .service-info { 
+        flex: 1; 
+        min-width: 200px;
+    }
+    .service-info h4 { 
+        margin-bottom: 5px; 
+    }
+    .service-price { 
+        font-size: 20px; 
+        font-weight: 700; 
+        color: #667eea; 
+        white-space: nowrap;
+        min-width: 100px;
+        text-align: left;
+    }
+    .service-actions { 
+        display: flex; 
+        gap: 10px; 
+        white-space: nowrap;
+    }
+    
+    @media (max-width: 600px) {
+        .service-card {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        .service-price {
+            text-align: left;
+        }
+    }
 ';
 
 include __DIR__ . '/../partials/header.php';
@@ -138,6 +176,8 @@ function showServiceForm(service = null) {
         title.textContent = 'Добавить услугу';
         document.getElementById('service-id').value = '';
         document.getElementById('service-form').reset();
+        document.getElementById('service-duration').value = '30';
+        document.getElementById('service-break').value = '0';
     }
     
     modal.style.display = 'flex';
@@ -165,6 +205,16 @@ async function saveService() {
         description: document.getElementById('service-description').value
     };
     
+    if (!data.service) {
+        alert('Введите название услуги');
+        return;
+    }
+    
+    if (!data.price || data.price <= 0) {
+        alert('Введите корректную цену');
+        return;
+    }
+    
     try {
         const url = id ? `/backend/public/api/services/${id}` : '/backend/public/api/services';
         const method = id ? 'PUT' : 'POST';
@@ -182,7 +232,8 @@ async function saveService() {
             closeModal();
             loadServices();
         } else {
-            alert('Ошибка сохранения');
+            const error = await response.json();
+            alert(error.error || 'Ошибка сохранения');
         }
     } catch (error) {
         alert('Ошибка соединения');
@@ -204,13 +255,18 @@ async function deleteService(id) {
     if (!confirm('Удалить услугу?')) return;
     
     try {
-        await fetch(`/backend/public/api/services/${id}`, {
+        const response = await fetch(`/backend/public/api/services/${id}`, {
             method: 'DELETE',
             headers: { 'Authorization': 'Bearer ' + token }
         });
-        loadServices();
+        
+        if (response.ok) {
+            loadServices();
+        } else {
+            alert('Ошибка удаления');
+        }
     } catch (error) {
-        alert('Ошибка удаления');
+        alert('Ошибка соединения');
     }
 }
 

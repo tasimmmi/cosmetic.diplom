@@ -5,6 +5,7 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Models\User;
 use App\Models\Schedule;
+use App\Models\Service;
 use App\Services\LoggerService;
 use App\Services\TokenService;
 
@@ -171,8 +172,39 @@ class ScheduleController
     }
 
     /**
+     * Проверить доступность времени без создания слотов (для "другого времени")
+     */
+    public function checkTimeOnly($request, $response)
+    {
+        $cosmetologistId = $this->getCosmetologistId();
+        if (!$cosmetologistId) return $response->error('Косметолог не найден', 404);
+
+        $data = $request->getBody();
+        $startTime = $data['start_time'] ?? '';
+        $endTime = $data['end_time'] ?? '';
+        $date = $data['date'] ?? date('Y-m-d');
+        $serviceId = $data['service_id'] ?? null;
+
+        if (!$startTime || !$endTime || !$serviceId) {
+            return $response->error('Недостаточно данных', 400);
+        }
+
+        $schedule = date('Y-m-d H:i:s', strtotime($date . ' ' . $startTime));
+        $endSchedule = date('Y-m-d H:i:s', strtotime($date . ' ' . $endTime));
+
+        $conflict = Schedule::isTimeSlotAvailableForAll($schedule, $endSchedule);
+        
+        if (!$conflict) {
+            return $response->error('Это время уже занято другим косметологом', 409);
+        }
+        
+        return $response->success(null, 'Время свободно');
+    }
+
+    /**
      * POST /api/cosmetologist/schedule/check-and-generate
      * Проверить доступность и создать слоты (всё или ничего)
+     * Устаревший метод, оставлен для обратной совместимости
      */
     public function checkAndGenerate($request, $response)
     {
@@ -188,27 +220,21 @@ class ScheduleController
         if (!$serviceId) return $response->error('Укажите service_id', 400);
         
         try {
-            // Шаг 1: Получаем длительность услуги
-            $service = \App\Models\Service::findById((int)$serviceId);
+            $service = Service::findById((int)$serviceId);
             if (!$service) return $response->error('Услуга не найдена', 404);
             
-            // Шаг 2: Проверяем занятые слоты в диапазоне
             $schedule = date('Y-m-d H:i:s', strtotime($date . ' ' . $startTime));
             $endSchedule = date('Y-m-d H:i:s', strtotime($date . ' ' . $endTime));
             
-            $conflict = \App\Models\Schedule::checkConflicts($cosmetologistId, $schedule, $endSchedule);
+            // Проверяем у ВСЕХ косметологов
+            $conflict = !Schedule::isTimeSlotAvailableForAll($schedule, $endSchedule);
             
             if ($conflict) {
                 return $response->error('Время занято', 409);
             }
             
-            // Шаг 3: Создаём слоты
-            $result = \App\Models\Schedule::generate(
-                $cosmetologistId, 
-                $startTime, 
-                $endTime, 
-                [$date]
-            );
+            // Создаём слоты
+            $result = Schedule::generate($cosmetologistId, $startTime, $endTime, [$date]);
             
             return $response->success($result, 'Слоты созданы');
             

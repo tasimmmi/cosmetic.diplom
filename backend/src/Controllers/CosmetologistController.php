@@ -264,6 +264,86 @@ class CosmetologistController
         return $response->error('Ошибка добавления закупки', 400);
     }
 
+    /** ========== НОВЫЕ МЕТОДЫ ДЛЯ РАБОТЫ С ЗАКУПКАМИ ========== */
+
+    /** GET /api/cosmetologist/procurements/all - получить все закупки */
+    public function getAllProcurements($request, $response)
+    {
+        $cosmetologistId = $this->getCosmetologistId($request);
+        if (!$cosmetologistId) {
+            return $response->error('Косметолог не найден', 404);
+        }
+        
+        $procurements = Procurement::getAll($cosmetologistId);
+        return $response->success(['procurements' => $procurements]);
+    }
+
+    /** PUT /api/cosmetologist/procurements/{id} - обновить закупку */
+    public function updateProcurement($request, $response, $id)
+    {
+        $cosmetologistId = $this->getCosmetologistId($request);
+        if (!$cosmetologistId) {
+            return $response->error('Косметолог не найден', 404);
+        }
+        
+        $data = $request->getBody();
+        
+        $procurement = Procurement::findById((int)$id);
+        if (!$procurement) {
+            return $response->error('Закупка не найдена', 404);
+        }
+        
+        // Проверяем доступ к материалу
+        $material = Material::findById($procurement['material_id']);
+        if ($material['cosmetologist_id'] != $cosmetologistId && !$material['is_mutable']) {
+            return $response->error('Доступ запрещен', 403);
+        }
+        
+        $result = Procurement::update((int)$id, [
+            'price' => (float)($data['price'] ?? $procurement['price']),
+            'date' => $data['date'] ?? $procurement['date']
+        ]);
+        
+        if ($result) {
+            return $response->success(null, 'Закупка обновлена');
+        }
+        return $response->error('Ошибка обновления закупки', 400);
+    }
+
+    /** DELETE /api/cosmetologist/procurements/{id} - удалить закупку */
+    public function deleteProcurement($request, $response, $id)
+    {
+        $cosmetologistId = $this->getCosmetologistId($request);
+        if (!$cosmetologistId) {
+            return $response->error('Косметолог не найден', 404);
+        }
+        
+        $procurement = Procurement::findById((int)$id);
+        if (!$procurement) {
+            return $response->error('Закупка не найдена', 404);
+        }
+        
+        // Проверяем доступ к материалу
+        $material = Material::findById($procurement['material_id']);
+        if ($material['cosmetologist_id'] != $cosmetologistId && !$material['is_mutable']) {
+            return $response->error('Доступ запрещен', 403);
+        }
+        
+        $result = Procurement::delete((int)$id);
+        
+        if ($result) {
+            // Проверяем, есть ли ещё закупки у этого материала
+            $remaining = Procurement::getByMaterialId($procurement['material_id']);
+            if (empty($remaining)) {
+                Material::updateStockStatus($procurement['material_id'], false);
+            }
+            return $response->success(null, 'Закупка удалена');
+        }
+        return $response->error('Ошибка удаления закупки', 400);
+    }
+
+    /** ========== КОНЕЦ НОВЫХ МЕТОДОВ ========== */
+
     /** GET /api/cosmetologist/clients */
     public function clients($request, $response)
     {
@@ -366,3 +446,4 @@ class CosmetologistController
         ]);
     }
 }
+?>

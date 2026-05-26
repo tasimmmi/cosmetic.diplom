@@ -6,7 +6,7 @@ use App\Config\Database;
 class Schedule
 {
     /**
-     * 🔥 Сгенерировать расписание через процедуру
+     * Сгенерировать расписание через процедуру
      */
     public static function generate(int $cosmetologistId, string $startTime, string $endTime, array $dates): array
     {
@@ -47,12 +47,51 @@ class Schedule
     {
         return Database::callProcedureAndFetch('sp_get_available_slots', [$date, $serviceId], 'si') ?: [];
     }
-    
 
     public static function checkTimeAvailable(int $serviceId, string $schedule): array
     {
         $rows = Database::callProcedureAndFetch('sp_check_time_available', [$serviceId, $schedule], 'is');
         return $rows[0] ?? [];
+    }
+
+    /**
+     * 🔥 НОВЫЙ МЕТОД: Проверить, есть ли занятые слоты у ЛЮБОГО косметолога
+     */
+    public static function isTimeSlotAvailableForAll(string $startTime, string $endTime): bool
+    {
+        $sql = "SELECT COUNT(*) as cnt FROM Schedule 
+                WHERE is_booked = 1 
+                AND begin_time < ? 
+                AND end_time > ?";
+        
+        $result = Database::fetch($sql, [$endTime, $startTime], 'ss');
+        
+        return ($result['cnt'] ?? 0) === 0;
+    }
+
+    /**
+     * 🔥 НОВЫЙ МЕТОД: Убедиться, что у косметолога есть слоты (если нет — создать)
+     */
+    public static function ensureSlotsExist(int $cosmetologistId, string $date, string $startTime, string $endTime): int
+    {
+        $sql = "SELECT COUNT(*) as cnt FROM Schedule 
+                WHERE cosmetologist_id = ? 
+                AND DATE(begin_time) = ? 
+                AND begin_time >= ? 
+                AND end_time <= ?";
+        
+        $result = Database::fetch($sql, [$cosmetologistId, $date, $startTime, $endTime], 'isss');
+        
+        if (($result['cnt'] ?? 0) > 0) {
+            return 0; // слоты уже есть
+        }
+        
+        // Создаём слоты через хранимую процедуру
+        $json = json_encode([$date], JSON_UNESCAPED_UNICODE);
+        $genSql = "CALL sp_generate_schedule(?, ?, ?, ?)";
+        $genResult = Database::fetch($genSql, [$cosmetologistId, $startTime, $endTime, $json], 'isss');
+        
+        return $genResult['created'] ?? 0;
     }
 
     public static function getAllByDate(string $date): array
@@ -172,6 +211,9 @@ class Schedule
         return Database::fetch($sql, [$cosmetologistId, $date], 'is') ?: [];
     }
 
+    /**
+     * Проверить конфликты только у конкретного косметолога
+     */
     public static function checkConflicts(int $cosmetologistId, string $startTime, string $endTime): bool
     {
         $sql = "SELECT COUNT(*) as cnt FROM Schedule 

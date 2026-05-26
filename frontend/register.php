@@ -1,7 +1,6 @@
 <?php
 $pageTitle = 'Регистрация';
 $redirect = $_GET['redirect'] ?? '';
-$role = $_GET['role'] ?? 'client';
 
 include __DIR__ . '/partials/header-simple.php';
 ?>
@@ -15,6 +14,7 @@ include __DIR__ . '/partials/header-simple.php';
         
         <form id="register-form">
             <input type="hidden" name="redirect" id="redirect" value="<?= htmlspecialchars($redirect) ?>">
+            <input type="hidden" name="role" value="client">
             
             <div class="form-group">
                 <label for="email" class="form-label">
@@ -44,39 +44,6 @@ include __DIR__ . '/partials/header-simple.php';
             </div>
             
             <div class="form-group">
-                <label class="form-label">Я хочу</label>
-                <div class="role-selector">
-                    <label class="role-card <?= $role === 'client' ? 'selected' : '' ?>" id="role-client">
-                        <input type="radio" name="role" value="client" <?= $role === 'client' ? 'checked' : '' ?>>
-                        <i class="fas fa-user"></i>
-                        <h5>Клиент</h5>
-                        <small>Буду записываться на услуги</small>
-                    </label>
-                    <label class="role-card <?= $role === 'cosmetologist' ? 'selected' : '' ?>" id="role-cosmetologist">
-                        <input type="radio" name="role" value="cosmetologist" <?= $role === 'cosmetologist' ? 'checked' : '' ?>>
-                        <i class="fas fa-spa"></i>
-                        <h5>Косметолог</h5>
-                        <small>Буду оказывать услуги</small>
-                    </label>
-                </div>
-            </div>
-            
-            <div id="cosmetologist-fields" style="display: <?= $role === 'cosmetologist' ? 'block' : 'none' ?>;">
-                <div class="form-group">
-                    <label for="first_name">Имя</label>
-                    <input type="text" class="form-control" id="first_name" name="first_name" placeholder="Анна">
-                </div>
-                <div class="form-group">
-                    <label for="last_name">Фамилия</label>
-                    <input type="text" class="form-control" id="last_name" name="last_name" placeholder="Иванова">
-                </div>
-                <div class="form-group">
-                    <label for="address">Адрес работы</label>
-                    <input type="text" class="form-control" id="address" name="address" placeholder="г. Могилев, ул. ...">
-                </div>
-            </div>
-            
-            <div class="form-group">
                 <label for="password" class="form-label">
                     <i class="fas fa-lock"></i> Пароль
                 </label>
@@ -94,8 +61,13 @@ include __DIR__ . '/partials/header-simple.php';
                 <label for="confirm_password" class="form-label">
                     <i class="fas fa-lock"></i> Подтверждение пароля
                 </label>
-                <input type="password" class="form-control" id="confirm_password" 
-                       name="confirm_password" placeholder="Повторите пароль" required>
+                <div class="password-field">
+                    <input type="password" class="form-control" id="confirm_password" 
+                           name="confirm_password" placeholder="Повторите пароль" required>
+                    <button type="button" class="password-toggle" id="toggle-confirm-password">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
                 <div class="form-error" id="confirm_password-error"></div>
             </div>
             
@@ -119,20 +91,35 @@ include __DIR__ . '/partials/header-simple.php';
     </div>
 </div>
 
-<script>
-// Переключение роли
-document.querySelectorAll('.role-card').forEach(card => {
-    card.addEventListener('click', function() {
-        document.querySelectorAll('.role-card').forEach(c => c.classList.remove('selected'));
-        this.classList.add('selected');
-        this.querySelector('input').checked = true;
-        
-        var role = this.querySelector('input').value;
-        document.getElementById('cosmetologist-fields').style.display = 
-            role === 'cosmetologist' ? 'block' : 'none';
-    });
-});
+<style>
+.password-field {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.password-field .form-control {
+    flex: 1;
+    padding-right: 40px;
+}
+.password-toggle {
+    position: absolute;
+    right: 10px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #999;
+    font-size: 16px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.password-toggle:hover {
+    color: #667eea;
+}
+</style>
 
+<script>
 // Обработка формы
 document.getElementById('register-form').addEventListener('submit', async function(e) {
     e.preventDefault();
@@ -157,18 +144,6 @@ document.getElementById('register-form').addEventListener('submit', async functi
         document.getElementById('phone-error').textContent = 'Введите корректный телефон';
         return;
     }
-    if (data.role === 'cosmetologist') {
-        if (!data.first_name || data.first_name.trim().length < 2) {
-            var el = document.getElementById('first_name-error');
-            if (el) el.textContent = 'Введите имя';
-            return;
-        }
-        if (!data.last_name || data.last_name.trim().length < 2) {
-            var el = document.getElementById('last_name-error');
-            if (el) el.textContent = 'Введите фамилию';
-            return;
-        }
-    }
     if (!data.password || data.password.length < 8) {
         document.getElementById('password-error').textContent = 'Пароль должен быть не менее 8 символов';
         return;
@@ -188,14 +163,8 @@ document.getElementById('register-form').addEventListener('submit', async functi
             password: data.password,
             fullname: data.fullname,
             phone: data.phone,
-            role: data.role
+            role: 'client'
         };
-        
-        if (data.role === 'cosmetologist') {
-            userData.first_name = data.first_name;
-            userData.last_name = data.last_name;
-            userData.address = data.address || '';
-        }
         
         var response = await fetch('/backend/public/api/auth/register', {
             method: 'POST',
@@ -247,7 +216,7 @@ document.getElementById('yandex-register').addEventListener('click', async funct
     }
 });
 
-// Показать/скрыть пароль
+// Показать/скрыть пароль (основное поле)
 document.getElementById('toggle-password').addEventListener('click', function() {
     var passwordInput = document.getElementById('password');
     var icon = this.querySelector('i');
@@ -257,6 +226,21 @@ document.getElementById('toggle-password').addEventListener('click', function() 
         icon.classList.add('fa-eye-slash');
     } else {
         passwordInput.type = 'password';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+    }
+});
+
+// Показать/скрыть пароль (подтверждение)
+document.getElementById('toggle-confirm-password').addEventListener('click', function() {
+    var confirmInput = document.getElementById('confirm_password');
+    var icon = this.querySelector('i');
+    if (confirmInput.type === 'password') {
+        confirmInput.type = 'text';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+    } else {
+        confirmInput.type = 'password';
         icon.classList.remove('fa-eye-slash');
         icon.classList.add('fa-eye');
     }

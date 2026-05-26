@@ -100,6 +100,15 @@ $app->delete('/api/cosmetologist/materials/{id}', [CosmetologistController::clas
 $app->post('/api/cosmetologist/procurements', [CosmetologistController::class, 'addProcurement'])
     ->middleware([AuthMiddleware::class, 'cosmetologist']);
 
+$app->get('/api/cosmetologist/procurements/all', [CosmetologistController::class, 'getAllProcurements'])
+    ->middleware([AuthMiddleware::class, 'cosmetologist']);
+$app->post('/api/cosmetologist/procurements', [CosmetologistController::class, 'addProcurement'])
+    ->middleware([AuthMiddleware::class, 'cosmetologist']);
+$app->put('/api/cosmetologist/procurements/{id}', [CosmetologistController::class, 'updateProcurement'])
+    ->middleware([AuthMiddleware::class, 'cosmetologist']);
+$app->delete('/api/cosmetologist/procurements/{id}', [CosmetologistController::class, 'deleteProcurement'])
+    ->middleware([AuthMiddleware::class, 'cosmetologist']);
+
 $app->get('/api/cosmetologist/clients/{id}', [CosmetologistController::class, 'clientDetails'])
     ->middleware([AuthMiddleware::class, 'cosmetologist']);
 $app->put('/api/cosmetologist/clients/{id}', [CosmetologistController::class, 'updateClient'])

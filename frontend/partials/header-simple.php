@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= $pageTitle ?? 'Cosmetic' ?> - Косметологический портал</title>
 
-    <script src="js/roleGuard.js"></script>
+    <script src="/frontend/js/roleGuard.js"></script>
 
     <link rel="icon" type="image/x-icon" href="/frontend/images/favicon.ico">
     
@@ -22,7 +22,7 @@
         <header class="header-simple">
             <div class="container">
                 <a href="/frontend/" class="logo">
-                    <span>Косметологический портал</span>
+                    Косметологический портал
                 </a>
             </div>
         </header>

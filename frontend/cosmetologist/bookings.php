@@ -392,6 +392,7 @@ async function loadAvailableSlots() {
 function selectTimeSlot(time, el) { document.querySelectorAll('#time-slots .time-slot').forEach(function(s) { s.classList.remove('selected'); }); el.classList.add('selected'); document.getElementById('custom-time-block').style.display = 'none'; }
 function showCustomTime() { document.querySelectorAll('#time-slots .time-slot').forEach(function(s) { s.classList.remove('selected'); }); document.getElementById('custom-time-block').style.display = 'block'; document.getElementById('booking-custom-time').focus(); }
 
+// Упрощённая функция createBooking — вся логика на бэкенде
 async function createBooking() {
     var clientId = document.getElementById('booking-client').value;
     var newName = document.getElementById('new-client-name').value.trim();
@@ -402,13 +403,11 @@ async function createBooking() {
     var time = null;
     var sel = document.querySelector('#time-slots .time-slot.selected');
     var cust = document.getElementById('booking-custom-time');
-    var isCustomTime = false;
     
     if (sel && !sel.classList.contains('other-time') && !sel.classList.contains('no-slots')) {
         time = sel.textContent.trim();
     } else if (cust.value) {
         time = cust.value;
-        isCustomTime = true;
     }
     
     if (!serviceId) { alert('Выберите услугу'); return; }
@@ -416,51 +415,56 @@ async function createBooking() {
     if (!time) { alert('Выберите время'); return; }
     if (!clientId && (!newName || !newPhone)) { alert('Выберите клиента или заполните имя и телефон'); return; }
     
+    // Создаём клиента если нужно
     if (clientId === 'new' && newName && newPhone) {
         try {
             var cr = await AUTH.fetch('/backend/public/api/cosmetologist/clients', { method:'POST', body:JSON.stringify({fullname:newName,phone:newPhone,communication:'phone'}) });
             var cd = await cr.json();
-            if (cd.success && cd.data && cd.data.client_id) clientId = cd.data.client_id;
-            else { alert('Ошибка создания клиента: ' + (cd.error||'')); return; }
-        } catch(e) { alert('Ошибка соединения'); return; }
-    }
-    
-    if (!clientId || clientId === 'new') { alert('Не удалось определить клиента'); return; }
-    
-    var schedule = date + ' ' + time + ':00';
-    
-    if (isCustomTime) {
-        var service = services.find(function(s) { return s.id == serviceId; });
-        if (!service) { alert('Услуга не найдена'); return; }
-        
-        var endTime = addMinutesToTime(time, service.duration);
-        
-        try {
-            var r = await AUTH.fetch('/backend/public/api/cosmetologist/schedule/check-and-generate', {
-                method: 'POST',
-                body: JSON.stringify({ date: date, start_time: time, end_time: endTime, service_id: serviceId })
-            });
-            var d = await r.json();
-            
-            if (!r.ok || !d.success) {
-                alert(d.error || 'Время занято или не удалось создать слоты');
+            if (cd.success && cd.data && cd.data.client_id) {
+                clientId = cd.data.client_id;
+            } else {
+                alert('Ошибка создания клиента: ' + (cd.error||''));
                 return;
             }
         } catch(e) {
-            alert('Ошибка проверки времени');
+            alert('Ошибка соединения');
             return;
         }
     }
     
+    if (!clientId || clientId === 'new') {
+        alert('Не удалось определить клиента');
+        return;
+    }
+    
+    var schedule = date + ' ' + time + ':00';
+    
+    // Отправляем запрос на создание записи — всю проверку делает бэкенд
     try {
         var r = await AUTH.fetch('/backend/public/api/bookings', { 
             method:'POST', 
-            body:JSON.stringify({ cosmetologist_id: cosmetologistId, client_id:parseInt(clientId), service_id:parseInt(serviceId), schedule: schedule, description: desc })
+            body:JSON.stringify({ 
+                cosmetologist_id: cosmetologistId, 
+                client_id: parseInt(clientId), 
+                service_id: parseInt(serviceId), 
+                schedule: schedule, 
+                description: desc 
+            })
         });
         var d = await r.json();
-        if (r.ok && d.success) { closeAddBookingModal(); loadBookings(); loadMonthData(); loadClientsAndServices(); }
-        else alert(d.error || 'Ошибка создания записи');
-    } catch(e) { alert('Ошибка соединения'); }
+        
+        if (r.ok && d.success) {
+            closeAddBookingModal();
+            loadBookings();
+            loadMonthData();
+            loadClientsAndServices();
+            alert('Запись успешно создана!');
+        } else {
+            alert(d.error || 'Ошибка создания записи');
+        }
+    } catch(e) {
+        alert('Ошибка соединения');
+    }
 }
 
 function addMinutesToTime(time, duration) {

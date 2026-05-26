@@ -20,73 +20,27 @@ $extraStyles = '
     .modal-left { flex: 1; padding: 20px; overflow-y: auto; }
     .modal-right { width: 350px; padding: 20px; background: #f8f9fa; overflow-y: auto; }
     
+    /* Стили для слотов времени */
+    .time-slot { padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 6px; cursor: pointer; text-align: center; font-size: 13px; transition: all 0.15s; }
+    .time-slot:hover { background: #f0f4ff; border-color: #667eea; }
+    .time-slot.selected { background: #667eea; color: white; border-color: #667eea; }
+    .time-slot.other-time { border-style: dashed; color: #667eea; }
+    
+    .time-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 8px 0; }
+    
     .history-item { padding: 12px 15px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 10px; background: white; }
     .history-item:last-child { margin-bottom: 0; }
-    .history-header { 
-        display: flex; 
-        justify-content: space-between; 
-        align-items: center; 
-        margin-bottom: 8px; 
-    }
-    .history-date-block {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-    .status-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        display: inline-block;
-        flex-shrink: 0;
-    }
-    .history-date { 
-        font-weight: 500; 
-        font-size: 14px; 
-        color: #333;
-    }
-    .history-service { 
-        font-size: 14px; 
-        color: #333; 
-        margin-bottom: 5px; 
-        padding-left: 16px;
-    }
-    .history-comment { 
-        font-size: 13px; 
-        color: #666; 
-        margin-bottom: 6px; 
-        padding: 5px 8px 5px 16px;
-        border-left: 3px solid #667eea;
-        border-radius: 0 4px 4px 0;
-        background: #f8f9fa;
-    }
-    .history-actions { 
-        display: flex; 
-        gap: 6px; 
-        opacity: 0.4;
-        transition: opacity 0.2s;
-    }
-    .history-item:hover .history-actions {
-        opacity: 1;
-    }
+    .history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .history-date-block { display: flex; align-items: center; gap: 8px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+    .history-date { font-weight: 500; font-size: 14px; color: #333; }
+    .history-service { font-size: 14px; color: #333; margin-bottom: 5px; padding-left: 16px; }
+    .history-comment { font-size: 13px; color: #666; margin-bottom: 6px; padding: 5px 8px 5px 16px; border-left: 3px solid #667eea; border-radius: 0 4px 4px 0; background: #f8f9fa; }
+    .history-actions { display: flex; gap: 6px; opacity: 0.4; transition: opacity 0.2s; }
+    .history-item:hover .history-actions { opacity: 1; }
     
-    /* Минималистичные круглые кнопки */
-    .btn-icon {
-        width: 28px;
-        height: 28px;
-        border-radius: 50%;
-        border: none;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 11px;
-        transition: all 0.2s;
-        color: white;
-    }
-    .btn-icon:hover {
-        transform: scale(1.15);
-    }
+    .btn-icon { width: 28px; height: 28px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 11px; transition: all 0.2s; color: white; }
+    .btn-icon:hover { transform: scale(1.15); }
     .btn-icon-confirm { background: #28a745; }
     .btn-icon-complete { background: #17a2b8; }
     .btn-icon-cancel { background: #dc3545; }
@@ -111,9 +65,13 @@ $extraStyles = '
     .comment-edit-area textarea { width: 100%; padding: 8px; font-size: 13px; border: 1px solid #ddd; border-radius: 4px; }
     .comment-edit-actions { display: flex; gap: 5px; margin-top: 5px; }
     
+    .custom-time-block { display: none; margin-top: 8px; }
+    .custom-time-block.show { display: block; }
+    
     @media (max-width: 768px) {
         .modal-box-body { flex-direction: column; }
         .modal-right { width: 100%; }
+        .time-grid { grid-template-columns: repeat(3, 1fr); }
     }
 ';
 
@@ -149,9 +107,7 @@ include __DIR__ . '/../partials/header.php';
     </div>
 </div>
 
-<!-- ================================================================ -->
-<!-- МОДАЛЬНОЕ ОКНО #1: ДЕТАЛИ КЛИЕНТА (история + быстрая запись)      -->
-<!-- ================================================================ -->
+<!-- МОДАЛЬНОЕ ОКНО #1: ДЕТАЛИ КЛИЕНТА (история + быстрая запись) -->
 <div class="modal-overlay" id="detail-modal">
     <div class="modal-box">
         <div class="modal-box-header">
@@ -169,24 +125,25 @@ include __DIR__ . '/../partials/header.php';
                 <div class="loading-container"><div class="loading-spinner"></div></div>
             </div>
             
-            <!-- ПРАВАЯ КОЛОНКА: Форма быстрой записи -->
+            <!-- ПРАВАЯ КОЛОНКА: Форма быстрой записи (улучшенная) -->
             <div class="modal-right">
                 <h4 style="margin-top: 0;">📅 Записать на прием</h4>
                 <div class="form-group">
                     <label>Услуга</label>
-                    <select class="form-control" id="modal-service">
+                    <select class="form-control" id="modal-service" onchange="loadAvailableSlots()">
                         <option value="">Выберите услугу</option>
                     </select>
                 </div>
                 <div class="form-group">
                     <label>Дата</label>
-                    <input type="date" class="form-control" id="modal-date">
+                    <input type="date" class="form-control" id="modal-date" onchange="loadAvailableSlots()">
                 </div>
-                <div class="form-group">
+                <div class="form-group" id="time-section" style="display: none;">
                     <label>Время</label>
-                    <select class="form-control" id="modal-time">
-                        <option value="">Выберите время</option>
-                    </select>
+                    <div class="time-grid" id="time-slots"></div>
+                    <div id="custom-time-block" class="custom-time-block">
+                        <input type="time" class="form-control" id="modal-custom-time" step="1800">
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>Комментарий</label>
@@ -200,9 +157,7 @@ include __DIR__ . '/../partials/header.php';
     </div>
 </div>
 
-<!-- ================================================================ -->
-<!-- МОДАЛЬНОЕ ОКНО #2: ДОБАВЛЕНИЕ КЛИЕНТА                            -->
-<!-- ================================================================ -->
+<!-- МОДАЛЬНОЕ ОКНО #2: ДОБАВЛЕНИЕ КЛИЕНТА -->
 <div class="modal-overlay" id="add-modal">
     <div class="modal-box" style="max-width: 450px;">
         <div class="modal-box-header">
@@ -237,9 +192,7 @@ include __DIR__ . '/../partials/header.php';
     </div>
 </div>
 
-<!-- ================================================================ -->
-<!-- МОДАЛЬНОЕ ОКНО #3: РЕДАКТИРОВАНИЕ КЛИЕНТА                         -->
-<!-- ================================================================ -->
+<!-- МОДАЛЬНОЕ ОКНО #3: РЕДАКТИРОВАНИЕ КЛИЕНТА -->
 <div class="modal-overlay" id="edit-modal">
     <div class="modal-box" style="max-width: 450px;">
         <div class="modal-box-header">
@@ -281,6 +234,19 @@ include __DIR__ . '/../partials/header.php';
 var clients = [];
 var currentDetailId = null;
 var currentClientData = null;
+var services = [];
+var cosmetologistId = null;
+
+// Получаем ID косметолога из токена
+(function init() {
+    var token = localStorage.getItem('access_token');
+    if (token) {
+        try {
+            var p = JSON.parse(atob(token.split('.')[1]));
+            cosmetologistId = p.cosmetologist_id;
+        } catch(e) {}
+    }
+})();
 
 // ========== ЗАГРУЗКА СПИСКА КЛИЕНТОВ ==========
 async function loadClients() {
@@ -354,9 +320,77 @@ function filterClients() {
         list.sort(function(a, b) { return (b.visit_count || 0) - (a.visit_count || 0); });
     } else if (sort === 'revenue') {
         list.sort(function(a, b) { return (b.total_spent || 0) - (a.total_spent || 0); });
+    } else if (sort === 'recent') {
+        list.sort(function(a, b) { return new Date(b.last_visit) - new Date(a.last_visit); });
     }
     
     renderClients(list);
+}
+
+// ========== ЗАГРУЗКА УСЛУГ ==========
+async function loadServices() {
+    try {
+        var response = await AUTH.fetch('/backend/public/api/cosmetologist/services');
+        var data = await response.json();
+        if (data.success) {
+            services = data.data.services || [];
+            var select = document.getElementById('modal-service');
+            select.innerHTML = '<option value="">Выберите услугу</option>';
+            services.forEach(function(s) {
+                select.innerHTML += '<option value="' + s.id + '">' + esc(s.service) + ' — ' + s.price + ' BYN (' + s.duration + ')</option>';
+            });
+        }
+    } catch(e) {}
+}
+
+// ========== ЗАГРУЗКА ДОСТУПНЫХ СЛОТОВ ==========
+async function loadAvailableSlots() {
+    var date = document.getElementById('modal-date').value;
+    var serviceId = document.getElementById('modal-service').value;
+    var timeSection = document.getElementById('time-section');
+    var grid = document.getElementById('time-slots');
+    var customBlock = document.getElementById('custom-time-block');
+    
+    if (!date || !serviceId || !cosmetologistId) {
+        timeSection.style.display = 'none';
+        return;
+    }
+    
+    timeSection.style.display = 'block';
+    grid.innerHTML = '<span style="font-size:12px;color:#999;">Загрузка...</span>';
+    customBlock.classList.remove('show');
+    
+    try {
+        var r = await AUTH.fetch('/backend/public/api/cosmetologists/' + cosmetologistId + '/slots?date=' + date + '&service_id=' + serviceId);
+        var d = await r.json();
+        var html = '';
+        if (d.success && d.data.slots && d.data.slots.length > 0) {
+            d.data.slots.forEach(function(s) {
+                var time = s.begin_time.split(' ')[1]?.substring(0, 5) || '';
+                html += '<div class="time-slot" onclick="selectTimeSlot(\'' + time + '\', this)">' + time + '</div>';
+            });
+        }
+        html += '<div class="time-slot other-time" onclick="showCustomTime()">' + (html === '' ? 'Добавить время' : 'Другое время') + '</div>';
+        grid.innerHTML = html;
+    } catch(e) {
+        grid.innerHTML = '<span style="font-size:12px;color:#d9534f;">Ошибка загрузки</span>';
+    }
+}
+
+function selectTimeSlot(time, el) {
+    document.querySelectorAll('#time-slots .time-slot').forEach(function(s) {
+        s.classList.remove('selected');
+    });
+    el.classList.add('selected');
+    document.getElementById('custom-time-block').classList.remove('show');
+}
+
+function showCustomTime() {
+    document.querySelectorAll('#time-slots .time-slot').forEach(function(s) {
+        s.classList.remove('selected');
+    });
+    document.getElementById('custom-time-block').classList.add('show');
+    document.getElementById('modal-custom-time').focus();
 }
 
 // ========== МОДАЛЬНОЕ ОКНО #1: ДЕТАЛИ (история + запись) ==========
@@ -365,64 +399,30 @@ async function openDetail(id) {
     document.getElementById('detail-modal').classList.add('show');
     document.getElementById('modal-history').innerHTML = '<div class="loading-container"><div class="loading-spinner"></div></div>';
     
+    // Сбрасываем форму записи
+    document.getElementById('modal-service').value = '';
+    document.getElementById('modal-date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('modal-date').min = new Date().toISOString().split('T')[0];
+    document.getElementById('modal-comment').value = '';
+    document.getElementById('time-section').style.display = 'none';
+    document.getElementById('time-slots').innerHTML = '';
+    document.getElementById('custom-time-block').classList.remove('show');
+    document.getElementById('modal-custom-time').value = '';
+    
+    await loadServices();
+    
     try {
         var response = await AUTH.fetch('/backend/public/api/cosmetologist/clients/' + id);
         var data = await response.json();
         
         if (data.success) {
             currentClientData = data.data.client;
-            
-            var isRegistered = currentClientData.user_id && currentClientData.user_id > 0;
-            var icon = isRegistered
-                ? '<span title="Зарегистрирован самостоятельно" style="display:inline-block; vertical-align:middle; margin-left:6px;">' +
-                    '<svg width="20" height="20" viewBox="0 0 16 16">' +
-                        '<circle cx="8" cy="5" r="3" fill="#667eea"/>' +
-                        '<ellipse cx="8" cy="13" rx="5" ry="3" fill="#667eea"/>' +
-                    '</svg>' +
-                  '</span>'
-                : '';
-            
-            // Имя слева, иконка справа
-            document.getElementById('modal-client-name').innerHTML = esc(currentClientData.fullname) + icon;
-            
-            // Скрываем кнопку "Изменить" для зарегистрированных клиентов
-            var editBtn = document.querySelector('#detail-modal .modal-box-header .btn-outline');
-            if (editBtn) {
-                editBtn.style.display = isRegistered ? 'none' : '';
-            }
-            
-            renderHistory(data.data.history || []);
-        } else {
-            document.getElementById('modal-history').innerHTML = '<p class="text-danger">Ошибка загрузки истории</p>';
+            document.getElementById('modal-client-name').textContent = esc(currentClientData.fullname);
+            renderClientHistory(data.data.history || []);
         }
     } catch(e) {
-        document.getElementById('modal-history').innerHTML = '<p class="text-danger">Ошибка соединения с сервером</p>';
+        document.getElementById('modal-history').innerHTML = '<p class="text-danger">Ошибка загрузки</p>';
     }
-    
-    // Загружаем услуги для выпадающего списка
-    try {
-        var servicesResponse = await AUTH.fetch('/backend/public/api/cosmetologist/services');
-        var servicesData = await servicesResponse.json();
-        
-        if (servicesData.success) {
-            var select = document.getElementById('modal-service');
-            select.innerHTML = '<option value="">Выберите услугу</option>';
-            (servicesData.data.services || []).forEach(function(s) {
-                select.innerHTML += '<option value="' + s.id + '">' + esc(s.service) + ' — ' + s.price + ' BYN</option>';
-            });
-        }
-    } catch(e) {}
-    
-    // Заполняем время (с 9:00 до 18:00 с шагом 30 минут)
-    var timeSelect = document.getElementById('modal-time');
-    timeSelect.innerHTML = '<option value="">Выберите время</option>';
-    for (var h = 9; h <= 18; h++) {
-        var hourStr = (h < 10 ? '0' : '') + h;
-        timeSelect.innerHTML += '<option value="' + hourStr + ':00">' + hourStr + ':00</option>';
-        timeSelect.innerHTML += '<option value="' + hourStr + ':30">' + hourStr + ':30</option>';
-    }
-    
-    document.getElementById('modal-date').min = new Date().toISOString().split('T')[0];
 }
 
 function closeModal() {
@@ -431,256 +431,149 @@ function closeModal() {
     currentClientData = null;
 }
 
-// 🔥 Финальный рендеринг — точка статуса, кнопки справа, комментарий только если есть
-function renderHistory(history) {
+function renderClientHistory(history) {
     var container = document.getElementById('modal-history');
     
     if (history.length === 0) {
-        container.innerHTML = '<p class="text-muted text-center py-4">Нет записей</p>';
+        container.innerHTML = '<p class="text-muted">Нет записей</p>';
         return;
     }
     
-    var statusColors = { 
-        pending: '#f0ad4e', 
-        confirmed: '#5bc0de', 
-        completed: '#5cb85c', 
-        cancelled: '#d9534f' 
-    };
+    var statusNames = { pending: 'Ожидает', confirmed: 'Подтверждена', completed: 'Завершена', cancelled: 'Отменена' };
+    var statusColors = { pending: '#f0ad4e', confirmed: '#5bc0de', completed: '#5cb85c', cancelled: '#d9534f' };
     
     var html = '';
-    history.forEach(function(b) {
-        var d = new Date(b.schedule);
-        var bookingId = b.id;
-        var status = b.status;
+    history.forEach(function(h) {
+        var date = new Date(h.schedule);
+        var dateStr = date.toLocaleDateString('ru-RU');
+        var timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        var statusName = statusNames[h.status] || h.status;
+        var statusColor = statusColors[h.status] || '#999';
+        var safeComment = h.description ? h.description.replace(/'/g, "\\'") : '';
         
-        html += '<div class="history-item" id="history-' + bookingId + '">' +
-            '<div class="history-header">' +
-                '<div class="history-date-block">' +
-                    '<span class="status-dot" style="background:' + (statusColors[status] || '#999') + '" title="' + status + '"></span>' +
-                    '<span class="history-date">' + d.toLocaleDateString('ru-RU') + ' в ' + 
-                        d.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'}) + '</span>' +
-                '</div>' +
-                '<div class="history-actions">' +
-                    '<button class="btn-icon btn-icon-edit" onclick="editComment(' + bookingId + ')" title="Комментарий">' +
-                        '<i class="fas fa-pen"></i></button>';
-            
-            if (status === 'pending') {
-                html += '<button class="btn-icon btn-icon-confirm" onclick="confirmBooking(' + bookingId + ')" title="Подтвердить">' +
-                    '<i class="fas fa-check"></i></button>' +
-                    '<button class="btn-icon btn-icon-cancel" onclick="cancelBooking(' + bookingId + ')" title="Отменить">' +
-                        '<i class="fas fa-times"></i></button>';
-            }
-            
-            if (status === 'confirmed') {
-                html += '<button class="btn-icon btn-icon-complete" onclick="completeBooking(' + bookingId + ')" title="Завершить">' +
-                    '<i class="fas fa-flag-checkered"></i></button>' +
-                    '<button class="btn-icon btn-icon-cancel" onclick="cancelBooking(' + bookingId + ')" title="Отменить">' +
-                        '<i class="fas fa-times"></i></button>';
-            }
-            
-        html += '</div></div>' +
-            '<div class="history-service">' + esc(b.service) + ' — ' + (b.price || 0) + ' BYN</div>';
-        
-        // 🔥 Комментарий показываем ТОЛЬКО если есть текст
-        if (b.description) {
-            html += '<div class="history-comment" id="comment-display-' + bookingId + '">' +
-                esc(b.description) +
-            '</div>';
+        html += '<div class="history-item" data-booking-id="' + h.booking_id + '">';
+        html += '<div class="history-header">';
+        html += '<div class="history-date-block">';
+        html += '<span class="status-dot" style="background:' + statusColor + '"></span>';
+        html += '<span class="history-date">' + dateStr + ' в ' + timeStr + '</span>';
+        html += '</div>';
+        html += '<div class="history-actions">';
+        if (h.status === 'pending') {
+            html += '<button class="btn-icon btn-icon-confirm" onclick="confirmBooking(' + h.booking_id + ')" title="Подтвердить"><i class="fas fa-check"></i></button>';
         }
-        
-        // Форма редактирования (всегда в DOM, но скрыта)
-        html += '<div class="comment-edit-area" id="comment-edit-' + bookingId + '">' +
-            '<textarea class="form-control" id="comment-text-' + bookingId + '" rows="2">' + esc(b.description || '') + '</textarea>' +
-            '<div class="comment-edit-actions">' +
-                '<button class="btn btn-xs btn-primary" onclick="saveComment(' + bookingId + ')">💾</button>' +
-                '<button class="btn btn-xs btn-outline" onclick="cancelEditComment(' + bookingId + ')">✕</button>' +
-            '</div>' +
-        '</div>';
-        
+        if (h.status === 'confirmed') {
+            html += '<button class="btn-icon btn-icon-complete" onclick="completeBooking(' + h.booking_id + ')" title="Завершить"><i class="fas fa-flag-checkered"></i></button>';
+        }
+        if (h.status === 'pending' || h.status === 'confirmed') {
+            html += '<button class="btn-icon btn-icon-cancel" onclick="cancelBooking(' + h.booking_id + ')" title="Отменить"><i class="fas fa-times"></i></button>';
+        }
+        html += '<button class="btn-icon btn-icon-edit" onclick="editComment(' + h.booking_id + ', \'' + safeComment + '\')" title="Комментарий"><i class="fas fa-pen"></i></button>';
+        html += '</div></div>';
+        html += '<div class="history-service">' + esc(h.service) + ' — <strong>' + (h.price || 0) + ' BYN</strong></div>';
+        if (h.description) {
+            html += '<div class="history-comment" id="comment-text-' + h.booking_id + '">💬 ' + esc(h.description) + '</div>';
+        }
         html += '</div>';
     });
-    
     container.innerHTML = html;
 }
 
-// ========== УПРАВЛЕНИЕ ЗАПИСЯМИ ==========
+// ========== ДЕЙСТВИЯ С ЗАПИСЯМИ ==========
+async function confirmBooking(id) {
+    if (!confirm('Подтвердить запись?')) return;
+    await AUTH.fetch('/backend/public/api/cosmetologist/bookings/' + id + '/confirm', { method: 'PUT' });
+    openDetail(currentDetailId);
+    loadClients();
+}
 
-// 🔥 Подтвердить запись
-async function confirmBooking(bookingId) {
-    if (!confirm('Подтвердить эту запись?')) return;
-    
-    try {
-        var response = await AUTH.fetch('/backend/public/api/cosmetologist/bookings/' + bookingId + '/confirm', {
-            method: 'PUT'
-        });
-        
-        var data = await response.json();
-        
-        if (response.ok && data.success) {
-            // Обновляем историю
-            openDetail(currentDetailId);
-        } else {
-            alert(data.error || 'Ошибка подтверждения');
-        }
-    } catch(e) {
-        alert('Ошибка соединения с сервером');
+async function completeBooking(id) {
+    if (!confirm('Завершить запись?')) return;
+    await AUTH.fetch('/backend/public/api/cosmetologist/bookings/' + id + '/complete', { method: 'PUT' });
+    openDetail(currentDetailId);
+    loadClients();
+}
+
+async function cancelBooking(id) {
+    if (!confirm('Отменить запись?')) return;
+    await AUTH.fetch('/backend/public/api/bookings/' + id + '/cancel', { method: 'PUT' });
+    openDetail(currentDetailId);
+    loadClients();
+}
+
+function editComment(id, oldComment) {
+    var newComment = prompt('Введите комментарий:', oldComment || '');
+    if (newComment !== null) {
+        saveComment(id, newComment);
     }
 }
 
-// 🔥 Завершить запись
-async function completeBooking(bookingId) {
-    if (!confirm('Отметить запись как завершенную?')) return;
-    
-    try {
-        var response = await AUTH.fetch('/backend/public/api/cosmetologist/bookings/' + bookingId + '/complete', {
-            method: 'PUT'
-        });
-        
-        var data = await response.json();
-        
-        if (response.ok && data.success) {
-            openDetail(currentDetailId);
-            loadClients(); // Обновляем список клиентов (изменится статистика)
-        } else {
-            alert(data.error || 'Ошибка завершения');
-        }
-    } catch(e) {
-        alert('Ошибка соединения с сервером');
-    }
+async function saveComment(id, comment) {
+    await AUTH.fetch('/backend/public/api/bookings/' + id + '/comment', {
+        method: 'PUT',
+        body: JSON.stringify({ description: comment })
+    });
+    openDetail(currentDetailId);
+    loadClients();
 }
 
-// 🔥 Отменить запись
-async function cancelBooking(bookingId) {
-    if (!confirm('Отменить эту запись? Это действие нельзя отменить.')) return;
-    
-    try {
-        var response = await AUTH.fetch('/backend/public/api/bookings/' + bookingId + '/cancel', {
-            method: 'PUT'
-        });
-        
-        var data = await response.json();
-        
-        if (response.ok && data.success) {
-            openDetail(currentDetailId);
-            loadClients(); // Обновляем список клиентов
-        } else {
-            alert(data.error || 'Ошибка отмены');
-        }
-    } catch(e) {
-        alert('Ошибка соединения с сервером');
-    }
-}
-
-// ========== РЕДАКТИРОВАНИЕ КОММЕНТАРИЯ ==========
-
-// 🔥 Показать форму редактирования комментария
-function editComment(bookingId) {
-    document.getElementById('comment-display-' + bookingId).style.display = 'none';
-    document.getElementById('comment-edit-' + bookingId).classList.add('show');
-    document.getElementById('comment-text-' + bookingId).focus();
-}
-
-// 🔥 Скрыть форму редактирования комментария
-function cancelEditComment(bookingId) {
-    document.getElementById('comment-display-' + bookingId).style.display = 'block';
-    document.getElementById('comment-edit-' + bookingId).classList.remove('show');
-}
-
-// 🔥 Сохранить комментарий
-async function saveComment(bookingId) {
-    var comment = document.getElementById('comment-text-' + bookingId).value.trim();
-    
-    try {
-        var response = await AUTH.fetch('/backend/public/api/bookings/' + bookingId + '/comment', {
-            method: 'PUT',
-            body: JSON.stringify({ description: comment })
-        });
-        
-        var data = await response.json();
-        
-        if (response.ok && data.success) {
-            // Обновляем отображение комментария
-            var displayEl = document.getElementById('comment-display-' + bookingId);
-            
-            if (comment) {
-                // Создаем или обновляем блок комментария
-                if (displayEl) {
-                    displayEl.innerHTML = esc(comment);
-                    displayEl.style.display = '';
-                } else {
-                    // Создаем новый блок после service
-                    var newComment = document.createElement('div');
-                    newComment.className = 'history-comment';
-                    newComment.id = 'comment-display-' + bookingId;
-                    newComment.innerHTML = esc(comment);
-                    
-                    var historyItem = document.getElementById('history-' + bookingId);
-                    var commentEdit = document.getElementById('comment-edit-' + bookingId);
-                    historyItem.insertBefore(newComment, commentEdit);
-                }
-            } else {
-                // Удаляем блок, если комментарий пустой
-                if (displayEl) {
-                    displayEl.remove();
-                }
-            }
-            
-            cancelEditComment(bookingId);
-        } else {
-            alert(data.error || 'Ошибка сохранения комментария');
-        }
-    } catch(e) {
-        alert('Ошибка соединения с сервером');
-    }
-}
-
-// ========== СОЗДАНИЕ НОВОЙ ЗАПИСИ ==========
+// ========== СОЗДАНИЕ ЗАПИСИ (как в bookings.php) ==========
 async function createBookingFromModal() {
     var serviceId = document.getElementById('modal-service').value;
     var date = document.getElementById('modal-date').value;
-    var time = document.getElementById('modal-time').value;
-    var comment = document.getElementById('modal-comment').value;
+    var comment = document.getElementById('modal-comment').value.trim();
+    var time = null;
     
-    if (!serviceId || !date || !time || !currentDetailId) {
-        alert('Заполните все поля');
+    var sel = document.querySelector('#time-slots .time-slot.selected');
+    var cust = document.getElementById('modal-custom-time');
+    
+    if (sel && !sel.classList.contains('other-time') && !sel.classList.contains('no-slots')) {
+        time = sel.textContent.trim();
+    } else if (cust.value) {
+        time = cust.value;
+    }
+    
+    if (!serviceId) { alert('Выберите услугу'); return; }
+    if (!date) { alert('Выберите дату'); return; }
+    if (!time) { alert('Выберите время'); return; }
+    if (!currentDetailId) { alert('Клиент не выбран'); return; }
+    
+    var schedule = date + ' ' + time + ':00';
+    
+    // Находим услугу для получения длительности (если нужно для кастомного времени)
+    var service = services.find(function(s) { return s.id == serviceId; });
+    
+    if (!service) {
+        alert('Услуга не найдена');
         return;
     }
     
-    var user = JSON.parse(localStorage.getItem('user') || '{}');
-    
+    // Отправляем запрос на создание записи (всю проверку делает бэкенд)
     try {
-        var response = await AUTH.fetch('/backend/public/api/bookings', {
+        var r = await AUTH.fetch('/backend/public/api/bookings', {
             method: 'POST',
             body: JSON.stringify({
-                cosmetologist_id: user.cosmetologist_id,
+                cosmetologist_id: cosmetologistId,
+                client_id: parseInt(currentDetailId),
                 service_id: parseInt(serviceId),
-                schedule: date + ' ' + time + ':00',
-                client_id: currentDetailId,
-                description: comment || ''
+                schedule: schedule,
+                description: comment
             })
         });
+        var d = await r.json();
         
-        var data = await response.json();
-        
-        if (response.ok && data.success) {
-            alert('Запись создана!');
-            // Очищаем форму
-            document.getElementById('modal-service').value = '';
-            document.getElementById('modal-date').value = '';
-            document.getElementById('modal-time').value = '';
-            document.getElementById('modal-comment').value = '';
-            // Обновляем историю
+        if (r.ok && d.success) {
+            alert('Запись успешно создана!');
             openDetail(currentDetailId);
             loadClients();
         } else {
-            alert(data.error || 'Ошибка при создании записи');
+            alert(d.error || 'Ошибка создания записи');
         }
     } catch(e) {
-        alert('Ошибка соединения с сервером');
+        alert('Ошибка соединения');
     }
 }
 
-// ========== МОДАЛЬНОЕ ОКНО #2: ДОБАВЛЕНИЕ КЛИЕНТА ==========
+// ========== ДОБАВИТЬ/РЕДАКТИРОВАТЬ КЛИЕНТА ==========
 function openAddModal() {
     document.getElementById('add-modal-title').textContent = 'Добавить клиента';
     document.getElementById('add-name').value = '';
@@ -706,45 +599,34 @@ async function saveNewClient() {
     try {
         var response = await AUTH.fetch('/backend/public/api/cosmetologist/clients', {
             method: 'POST',
-            body: JSON.stringify({
-                fullname: name,
-                phone: phone,
-                communication: comm
-            })
+            body: JSON.stringify({ fullname: name, phone: phone, communication: comm })
         });
+        var result = await response.json();
         
-        var data = await response.json();
-        
-        if (response.ok && data.success) {
+        if (response.ok && result.success) {
             closeAddModal();
             loadClients();
+            alert('Клиент добавлен');
         } else {
-            alert(data.error || 'Ошибка при добавлении клиента');
+            alert(result.error || 'Ошибка добавления');
         }
     } catch(e) {
-        alert('Ошибка соединения с сервером');
+        alert('Ошибка соединения');
     }
 }
 
-// ========== МОДАЛЬНОЕ ОКНО #3: РЕДАКТИРОВАНИЕ КЛИЕНТА ==========
 function editCurrentClient() {
-    if (!currentClientData) {
-        alert('Нет данных о клиенте');
-        return;
-    }
-    
-    document.getElementById('edit-modal-title').textContent = 'Изменить: ' + currentClientData.fullname;
+    if (!currentClientData) return;
+    document.getElementById('edit-modal-title').textContent = 'Редактировать клиента';
     document.getElementById('edit-id').value = currentClientData.id;
-    document.getElementById('edit-name').value = currentClientData.fullname;
+    document.getElementById('edit-name').value = currentClientData.fullname || '';
     document.getElementById('edit-phone').value = currentClientData.phone || '';
     document.getElementById('edit-comm').value = currentClientData.communication || 'phone';
-    
     document.getElementById('edit-modal').classList.add('show');
 }
 
 function closeEditModal() {
     document.getElementById('edit-modal').classList.remove('show');
-    document.getElementById('edit-id').value = '';
 }
 
 async function saveEditedClient() {
@@ -761,55 +643,47 @@ async function saveEditedClient() {
     try {
         var response = await AUTH.fetch('/backend/public/api/cosmetologist/clients/' + id, {
             method: 'PUT',
-            body: JSON.stringify({
-                fullname: name,
-                phone: phone,
-                communication: comm
-            })
+            body: JSON.stringify({ fullname: name, phone: phone, communication: comm })
         });
+        var result = await response.json();
         
-        var data = await response.json();
-        
-        if (response.ok && data.success) {
+        if (response.ok && result.success) {
             closeEditModal();
-            if (currentDetailId == id) {
-                openDetail(id);
-            }
             loadClients();
+            if (currentDetailId) openDetail(currentDetailId);
+            alert('Данные обновлены');
         } else {
-            alert(data.error || 'Ошибка при обновлении данных');
+            alert(result.error || 'Ошибка обновления');
         }
     } catch(e) {
-        alert('Ошибка соединения с сервером');
+        alert('Ошибка соединения');
     }
 }
 
-// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
-function esc(t) {
-    if (!t) return '';
-    var d = document.createElement('div');
-    d.textContent = t;
-    return d.innerHTML;
+function fmtDate(date) {
+    if (!date) return '—';
+    var d = new Date(date);
+    return d.toLocaleDateString('ru-RU');
 }
 
-function fmtDate(d) {
-    return d ? new Date(d).toLocaleDateString('ru-RU') : '—';
+function esc(text) {
+    if (!text) return '';
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
-// ========== ЗАКРЫТИЕ МОДАЛЬНЫХ ОКОН ПО КЛИКУ ВНЕ ==========
+// Закрытие модалок по клику вне
 document.getElementById('detail-modal').addEventListener('click', function(e) {
     if (e.target === this) closeModal();
 });
-
 document.getElementById('add-modal').addEventListener('click', function(e) {
     if (e.target === this) closeAddModal();
 });
-
 document.getElementById('edit-modal').addEventListener('click', function(e) {
     if (e.target === this) closeEditModal();
 });
 
-// ========== ЗАГРУЗКА ПРИ СТАРТЕ ==========
 loadClients();
 </script>
 

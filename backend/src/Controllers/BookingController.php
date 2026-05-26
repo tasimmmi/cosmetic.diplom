@@ -6,6 +6,8 @@ use App\Core\Response;
 use App\Models\Booking;
 use App\Models\Service;
 use App\Models\User;
+use App\Models\Client;
+use App\Models\Schedule;
 use App\Config\Database;
 use App\Services\EmailService;
 use App\Services\LoggerService;
@@ -97,6 +99,7 @@ class BookingController
 
     /**
      * Создать бронирование (клиент или косметолог)
+     * Вся бизнес-логика проверки свободного времени здесь
      */
     public function create($request, $response)
     {
@@ -133,9 +136,11 @@ class BookingController
         }
         
         $scheduleFormatted = date('Y-m-d H:i:s', strtotime($data['schedule']));
+        $date = date('Y-m-d', strtotime($scheduleFormatted));
+        $time = date('H:i:s', strtotime($scheduleFormatted));
         
+        // Получаем услугу и её длительность
         $service = Service::findById((int)$data['service_id']);
-        
         if (!$service) {
             return $response->error('Услуга не найдена', 404);
         }
@@ -144,9 +149,27 @@ class BookingController
             return $response->error('Услуга не принадлежит указанному косметологу', 400);
         }
         
+        // Вычисляем длительность услуги в секундах
+        $durationSec = strtotime($service['duration']) - strtotime('00:00:00');
+        $breakSec = isset($service['break_time']) ? (strtotime($service['break_time']) - strtotime('00:00:00')) : 0;
+        $totalDuration = $durationSec + $breakSec;
+        
+        $endSchedule = date('Y-m-d H:i:s', strtotime($scheduleFormatted) + $totalDuration);
+        $endTime = date('H:i:s', strtotime($endSchedule));
+        
         try {
             Database::beginTransaction();
             
+            // 🔥 ШАГ 1: Проверяем, свободно ли время у ВСЕХ косметологов
+            if (!Schedule::isTimeSlotAvailableForAll($scheduleFormatted, $endSchedule)) {
+                Database::rollback();
+                return $response->error('Выбранное время уже занято другим косметологом', 409);
+            }
+            
+            // 🔥 ШАГ 2: Убеждаемся, что у этого косметолога есть слоты (если нет — создаём)
+            Schedule::ensureSlotsExist($cosmetologistId, $date, $time, $endTime);
+            
+            // 🔥 ШАГ 3: Создаём запись
             $bookingId = Booking::create([
                 'cosmetologist_id' => (int)$cosmetologistId,
                 'service_id' => (int)$data['service_id'],
@@ -159,6 +182,17 @@ class BookingController
             Database::commit();
             
             LoggerService::info('Booking created', ['booking_id' => $bookingId]);
+            
+            // 🔥 ШАГ 4: Отправляем email-уведомление клиенту
+            $bookingDetails = Booking::findById($bookingId);
+            $client = Client::findById((int)$clientId);
+            
+            if ($client && !empty($client['user_id'])) {
+                $clientUser = User::findById($client['user_id']);
+                if ($clientUser && !empty($clientUser['email'])) {
+                    $this->emailService->sendBookingConfirmation($clientUser['email'], $bookingDetails);
+                }
+            }
             
             return $response->success(['booking_id' => $bookingId], 'Запись успешно создана');
             
