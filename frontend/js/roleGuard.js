@@ -1,101 +1,134 @@
 /**
- * Единый защитник роутов
- * Подключается на ВСЕ страницы
+ * roleGuard.js - защита маршрутов по ролям
  */
 
 (function() {
     'use strict';
     
-    const token = localStorage.getItem('access_token');
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    const currentPath = window.location.pathname;
-    const isAuthenticated = !!(token && user.id);
+    // ========== ОБРАБОТКА OAuth CALLBACK (сохранение токенов из URL) ==========
+    const urlParams = new URLSearchParams(window.location.search);
+    const accessToken = urlParams.get('access_token');
+    const refreshToken = urlParams.get('refresh_token');
     
-    console.log('[RoleGuard] Path:', currentPath);
-    console.log('[RoleGuard] Auth:', isAuthenticated ? 'Yes (' + user.role + ')' : 'No');
+    // Проверяем наличие токенов в URL
+    if (accessToken && refreshToken) {
+        // Сохраняем токены
+        localStorage.setItem('access_token', accessToken);
+        localStorage.setItem('refresh_token', refreshToken);
+        
+        // Сохраняем данные пользователя
+        const user = {};
+        for (const [key, value] of urlParams.entries()) {
+            if (key.startsWith('user[')) {
+                const match = key.match(/user\[(.*?)\]/);
+                if (match) {
+                    let val = value;
+                    // Декодируем URL-encoded строки
+                    try {
+                        val = decodeURIComponent(value);
+                    } catch(e) {}
+                    // Преобразуем числовые значения
+                    if (match[1] === 'id' || match[1] === 'cosmetologist_id' || match[1] === 'client_id') {
+                        val = parseInt(value);
+                    }
+                    // Преобразуем boolean
+                    if (match[1] === 'email_verified') {
+                        val = value === '1';
+                    }
+                    user[match[1]] = val;
+                }
+            }
+        }
+        
+        if (Object.keys(user).length > 0) {
+            localStorage.setItem('user', JSON.stringify(user));
+        }
+        
+        // Очищаем URL от всех параметров и остаёмся на той же странице
+        const cleanUrl = window.location.pathname;
+        window.location.replace(cleanUrl);
+        return;
+    }
+    
+    // ========== ОСНОВНАЯ ЛОГИКА РОЛЕЙ ==========
+    
+    // Получаем данные из localStorage
+    const token = localStorage.getItem('access_token');
+    let user = null;
+    
+    try {
+        const userStr = localStorage.getItem('user');
+        if (userStr && userStr !== 'undefined') {
+            user = JSON.parse(userStr);
+        }
+    } catch(e) {
+        console.error('[RoleGuard] Error parsing user:', e);
+    }
+    
+    let currentPath = window.location.pathname;
+    
+    // Нормализация пути
+    if (currentPath === '/frontend/' || currentPath === '/frontend') {
+        currentPath = '/frontend/login.php';
+    }
+    
+    const isAuthenticated = !!(token && user && user.id);
+    
+    // ========== СТРАНИЦЫ АВТОРИЗАЦИИ ==========
+    const authPages = [
+        '/frontend/login.php',
+        '/frontend/register.php',
+        '/frontend/forgot-password.php',
+        '/frontend/reset-password.php',
+        '/frontend/verify-email.php'
+    ];
+    const isAuthPage = authPages.some(page => currentPath === page || currentPath.includes(page));
+    
+    // Если на странице авторизации и авторизован -> на дашборд
+    if (isAuthPage && isAuthenticated) {
+        const dashboardUrl = user.role === 'cosmetologist' 
+            ? '/frontend/cosmetologist/dashboard.php' 
+            : '/frontend/client/dashboard.php';
+        window.location.replace(dashboardUrl);
+        return;
+    }
     
     // ========== ПУБЛИЧНЫЕ СТРАНИЦЫ ==========
     const publicPages = [
-        '/frontend/',
         '/frontend/index.php',
         '/frontend/card.php',
-        '/frontend/verify-email.php'
+        '/frontend/logout.php'
     ];
+    const isPublicPage = publicPages.some(page => currentPath.includes(page));
     
-    const isPublicPage = publicPages.some(page => currentPath.includes(page) || currentPath === page);
+    if (isPublicPage) {
+        return;
+    }
     
-    // ========== СТРАНИЦЫ ВХОДА И РЕГИСТРАЦИИ ==========
-    const isLoginPage = currentPath.includes('/login.php');
-    const isRegisterPage = currentPath.includes('/register.php');
-    
-    // ========== СТРАНИЦЫ КЛИЕНТА ==========
-    const clientPages = [
-        '/frontend/client/',
-        '/frontend/client/dashboard.php',
-        '/frontend/client/history.php'
-    ];
-    
-    const isClientPage = clientPages.some(page => currentPath.includes(page));
-    
-    // ========== СТРАНИЦЫ КОСМЕТОЛОГА ==========
-    const cosmetologistPages = [
-        '/frontend/cosmetologist/',
-        '/frontend/cosmetologist/dashboard.php',
-        '/frontend/cosmetologist/bookings.php',
-        '/frontend/cosmetologist/schedule.php',
-        '/frontend/cosmetologist/services.php',
-        '/frontend/cosmetologist/materials.php',
-        '/frontend/cosmetologist/clients.php',
-        '/frontend/cosmetologist/reports.php'
-    ];
-    
-    const isCosmetologistPage = cosmetologistPages.some(page => currentPath.includes(page));
-    
-    // ========== СТРАНИЦА ПРОФИЛЯ ==========
+    // ========== ЗАЩИЩЁННЫЕ СТРАНИЦЫ ==========
+    const isClientPage = currentPath.includes('/frontend/client/');
+    const isCosmetologistPage = currentPath.includes('/frontend/cosmetologist/');
     const isProfilePage = currentPath.includes('/frontend/profile.php');
+    const isProtectedPage = isClientPage || isCosmetologistPage || isProfilePage;
     
-    // ========== ЛОГИКА ПРОВЕРКИ ==========
-    
-    // 1. АВТОРИЗОВАН И НАХОДИТСЯ НА СТРАНИЦЕ ВХОДА ИЛИ РЕГИСТРАЦИИ
-    if (isAuthenticated && (isLoginPage || isRegisterPage)) {
-        const urlParams = new URLSearchParams(window.location.search);
-        const redirect = urlParams.get('redirect');
-        
-        let redirectUrl;
-        if (redirect) {
-            redirectUrl = redirect;
-        } else {
-            redirectUrl = user.role === 'cosmetologist' 
-                ? '/frontend/cosmetologist/dashboard.php' 
-                : '/frontend/client/dashboard.php';
+    if (isProtectedPage) {
+        // Не авторизован - перенаправляем на вход
+        if (!isAuthenticated) {
+            const redirectUrl = encodeURIComponent(currentPath + window.location.search);
+            window.location.replace('/frontend/login.php?redirect=' + redirectUrl);
+            return;
         }
         
-        console.log('[RoleGuard] Authenticated user on auth page, redirecting to:', redirectUrl);
-        window.location.href = redirectUrl;
-        return;
+        // Проверка ролей
+        if (isClientPage && user.role !== 'client') {
+            window.location.replace('/frontend/cosmetologist/dashboard.php');
+            return;
+        }
+        
+        if (isCosmetologistPage && user.role !== 'cosmetologist') {
+            window.location.replace('/frontend/client/dashboard.php');
+            return;
+        }
     }
-    
-    // 2. НЕ АВТОРИЗОВАН, НО ПЫТАЕТСЯ ЗАЙТИ В ЗАЩИЩЕННЫЙ РАЗДЕЛ
-    if (!isAuthenticated && (isClientPage || isCosmetologistPage || isProfilePage)) {
-        console.log('[RoleGuard] Not authenticated, redirecting to login');
-        window.location.href = '/frontend/login.php?redirect=' + encodeURIComponent(currentPath + window.location.search);
-        return;
-    }
-    
-    // 3. КЛИЕНТ ПЫТАЕТСЯ ЗАЙТИ В РАЗДЕЛ КОСМЕТОЛОГА
-    if (isAuthenticated && user.role === 'client' && isCosmetologistPage) {
-        console.log('[RoleGuard] Client cannot access cosmetologist area, redirecting to client dashboard');
-        window.location.href = '/frontend/client/dashboard.php';
-        return;
-    }
-    
-    // 4. КОСМЕТОЛОГ ПЫТАЕТСЯ ЗАЙТИ В РАЗДЕЛ КЛИЕНТА
-    if (isAuthenticated && user.role === 'cosmetologist' && isClientPage) {
-        console.log('[RoleGuard] Cosmetologist cannot access client area, redirecting to cosmetologist dashboard');
-        window.location.href = '/frontend/cosmetologist/dashboard.php';
-        return;
-    }
-    
-    console.log('[RoleGuard] Access granted');
     
 })();
